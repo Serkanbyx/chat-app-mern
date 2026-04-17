@@ -130,11 +130,14 @@ export const changePassword = asyncHandler(async (req, res) => {
 const cascadeUserDeletion = async (userId) => {
   const tasks = [];
 
-  // Remove from other users' blockedUsers arrays.
+  // Remove from other users' blockedUsers arrays. `blockedUsers` is an
+  // array of `{ user, blockedAt }` subdocs (see User.js), so we must
+  // match and pull by the nested `user` field — matching the bare id
+  // would silently no-op and leave stale references behind.
   tasks.push(
     User.updateMany(
-      { blockedUsers: userId },
-      { $pull: { blockedUsers: userId } },
+      { 'blockedUsers.user': userId },
+      { $pull: { blockedUsers: { user: userId } } },
     ),
   );
 

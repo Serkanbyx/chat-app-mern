@@ -23,7 +23,6 @@ export default defineConfig({
             { name: 'router', test: /[\\/]node_modules[\\/]react-router(?:-dom)?[\\/]/, priority: 25 },
             { name: 'socket-io', test: /[\\/]node_modules[\\/](socket\.io-client|engine\.io-client|@socket\.io)[\\/]/, priority: 20 },
             { name: 'emoji-picker', test: /[\\/]node_modules[\\/]emoji-picker-react[\\/]/, priority: 20 },
-            { name: 'date-fns', test: /[\\/]node_modules[\\/]date-fns[\\/]/, priority: 15 },
             { name: 'lucide', test: /[\\/]node_modules[\\/]lucide-react[\\/]/, priority: 15 },
             { name: 'axios', test: /[\\/]node_modules[\\/]axios[\\/]/, priority: 10 },
           ],

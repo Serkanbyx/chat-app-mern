@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import { STORAGE_KEYS } from '../utils/constants.js';
+
 /**
  * Singleton Axios client used by every service module.
  *
@@ -27,7 +29,7 @@ const api = axios.create({
  * sees `null` immediately rather than firing with a stale token.
  */
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -50,7 +52,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
       const onLoginPage = window.location.pathname.startsWith('/login');
       if (!onLoginPage) {
         window.location.replace('/login');
