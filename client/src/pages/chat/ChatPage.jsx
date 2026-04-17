@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import ChatHeader from '../../components/chat/ChatHeader.jsx';
+import MessageComposer from '../../components/chat/MessageComposer.jsx';
 import MessagesList from '../../components/chat/MessagesList.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useChatState } from '../../contexts/ChatStateContext.jsx';
@@ -76,6 +77,10 @@ const ChatPage = () => {
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState(null);
+  /* `replyTo` lives on the page (not the composer) so that the eventual
+   * "reply" affordance on `MessageBubble` (Step 29) only has to call
+   * `setReplyTo(message)` to wire the composer's quoted preview. */
+  const [replyTo, setReplyTo] = useState(null);
 
   const listRef = useRef(null);
 
@@ -96,6 +101,7 @@ const ChatPage = () => {
     setError(null);
     setIsLoadingInitial(true);
     setIsLoadingOlder(false);
+    setReplyTo(null);
   }, [conversationId]);
 
   /* ---------- Initial fetch (conversation + first page) ----------
@@ -314,6 +320,55 @@ const ChatPage = () => {
     };
   }, [conversationId, currentUserId, emit, socket]);
 
+  /* ---------- Optimistic-send wiring (consumed by MessageComposer) ----------
+   * We keep these helpers here (rather than passing `setMessages` down)
+   * so the composer's prop surface stays narrow and so future
+   * consumers — e.g. a "retry failed message" button on the bubble —
+   * can call the same primitives without re-implementing the dedupe
+   * rules. */
+  const handleOptimisticAdd = useCallback((message) => {
+    if (!message || !message.clientTempId) return;
+    setMessages((prev) => {
+      // Defensive: a duplicate clientTempId would only happen with a
+      // double-submit; the second one wins so the older spinner can't
+      // get stranded.
+      const filtered = prev.filter(
+        (m) => m.clientTempId !== message.clientTempId,
+      );
+      return [...filtered, message];
+    });
+  }, []);
+
+  const handleOptimisticUpdate = useCallback((clientTempId, patch) => {
+    if (!clientTempId || !patch) return;
+    setMessages((prev) =>
+      prev.map((m) => (m.clientTempId === clientTempId ? { ...m, ...patch } : m)),
+    );
+  }, []);
+
+  const handleAfterSend = useCallback(() => {
+    // The composer fires this immediately after dispatching the
+    // optimistic bubble. Snap the timeline to the bottom so the user
+    // always sees their own message land, regardless of where they
+    // were scrolled before hitting Send.
+    listRef.current?.scrollToBottom?.({ behavior: 'smooth' });
+  }, []);
+
+  const handleCancelReply = useCallback(() => setReplyTo(null), []);
+
+  /* ---------- Composer disabled-state derivation ----------
+   * Mirrors the server's write-side guards so the textarea reflects
+   * reality before the user types into it. The server is still the
+   * authority — these flags are UX hints. */
+  const composerDisabled =
+    !conversationId ||
+    isLoadingInitial ||
+    Boolean(error) ||
+    conversation?.isActive === false;
+  const composerDisabledReason = !conversation?.isActive
+    ? 'This conversation is no longer active.'
+    : '';
+
   /* ---------- Older-page fetch (called by MessagesList sentinel) ---------- */
   const handleLoadOlder = useCallback(async () => {
     if (!conversationId || isLoadingOlder || !hasMore) return;
@@ -401,13 +456,16 @@ const ChatPage = () => {
         showReadReceipts={preferences?.showReadReceipts !== false}
       />
 
-      {/* Composer placeholder — STEP 28 fills this slot with the full
-          MessageComposer. Keeping the empty footer here preserves the
-          three-row layout (header / list / composer) so the visual
-          rhythm doesn't shift when STEP 28 lands. */}
-      <div className="border-t border-gray-200 bg-white px-3 py-2 text-center text-[11px] text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500">
-        Composer will arrive in Step 28.
-      </div>
+      <MessageComposer
+        conversationId={conversationId}
+        replyTo={replyTo}
+        onCancelReply={handleCancelReply}
+        onOptimisticAdd={handleOptimisticAdd}
+        onOptimisticUpdate={handleOptimisticUpdate}
+        onAfterSend={handleAfterSend}
+        disabled={composerDisabled}
+        disabledReason={composerDisabledReason}
+      />
     </div>
   );
 };
