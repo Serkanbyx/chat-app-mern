@@ -5,6 +5,7 @@ import { WifiOff } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar.jsx';
 import NewChatModal from '../components/chat/NewChatModal.jsx';
 import NewGroupModal from '../components/chat/NewGroupModal.jsx';
+import NotificationPermissionBanner from '../components/chat/NotificationPermissionBanner.jsx';
 import {
   ChatStateProvider,
   useChatState,
@@ -76,6 +77,8 @@ const ChatLayout = () => {
             <span>Reconnecting…</span>
           </div>
         ) : null}
+
+        <NotificationPermissionBanner />
 
         <div className="flex min-h-0 w-full flex-1 overflow-hidden">
           <div

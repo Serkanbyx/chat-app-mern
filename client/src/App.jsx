@@ -18,6 +18,8 @@ import EmptyChatPage from './pages/chat/EmptyChatPage.jsx';
 
 import ProfilePage from './pages/profile/ProfilePage.jsx';
 
+import NotificationsPage from './pages/notifications/NotificationsPage.jsx';
+
 import AccountSettings from './pages/settings/AccountSettings.jsx';
 import AppearanceSettings from './pages/settings/AppearanceSettings.jsx';
 import BlockedUsersSettings from './pages/settings/BlockedUsersSettings.jsx';
@@ -47,6 +49,7 @@ import NotFoundPage from './pages/NotFoundPage.jsx';
  *
  *   Authenticated (with navbar):
  *     /u/:username                  → ProfilePage
+ *     /notifications                → NotificationsPage
  *     /settings/*                   → SettingsLayout
  *     /admin/*  (admin role only)   → AdminLayout
  *
@@ -80,6 +83,7 @@ const App = () => {
 
         <Route element={<MainLayout />}>
           <Route path="/u/:username" element={<ProfilePage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
 
           <Route path="/settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/profile" replace />} />

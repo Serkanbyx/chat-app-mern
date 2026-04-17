@@ -66,10 +66,17 @@ export const NotificationProvider = ({ children }) => {
   useEffect(() => { preferencesRef.current = preferences; }, [preferences]);
   useEffect(() => { userRef.current = user; }, [user]);
 
-  /* ---------- Hydrate unread count on login ----------
+  /* ---------- Hydrate unread count + recent items on login ----------
    * The badge needs the right number BEFORE the first socket event
    * arrives, otherwise it would render as zero on a fresh tab even
-   * when the user has 12 unread items waiting. */
+   * when the user has 12 unread items waiting.
+   *
+   * We also pre-fill the in-memory ring buffer with the most recent
+   * persisted notifications so that opening the navbar dropdown on a
+   * fresh tab shows real history instead of a useless empty state.
+   * The full inbox page (`/notifications`) still drives its own
+   * paginated fetch — this hydration is purely for the always-mounted
+   * dropdown. */
   useEffect(() => {
     if (!isAuthenticated) {
       setUnreadCount(0);
@@ -79,9 +86,14 @@ export const NotificationProvider = ({ children }) => {
     let cancelled = false;
     (async () => {
       try {
-        const result = await notificationService.getUnreadCount();
+        const result = await notificationService.listNotifications({
+          page: 1,
+          limit: NOTIFICATION_BUFFER_SIZE,
+        });
         if (cancelled) return;
-        const count = result?.data?.count ?? 0;
+        const items = result?.data?.items ?? [];
+        const count = result?.data?.unreadCount ?? 0;
+        setNotifications(items);
         setUnreadCount(count);
       } catch {
         /* Non-fatal — the badge will hydrate from the next event. */
@@ -216,6 +228,31 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [unreadCount]);
 
+  /**
+   * Dismiss removes a notification permanently (server + local cache).
+   * Used by the full inbox page; the dropdown only marks-read so the
+   * collapse window stays useful for the same-conversation tag.
+   */
+  const dismiss = useCallback(async (id) => {
+    let snapshot;
+    let wasUnread = false;
+    setNotifications((prev) => {
+      snapshot = prev;
+      const target = prev.find((n) => n._id === id);
+      wasUnread = Boolean(target && !target.isRead);
+      return prev.filter((n) => n._id !== id);
+    });
+    if (wasUnread) setUnreadCount((prev) => Math.max(0, prev - 1));
+    try {
+      await notificationService.dismiss(id);
+    } catch (error) {
+      // Roll back so the user doesn't lose context on transient failure.
+      setNotifications(snapshot);
+      if (wasUnread) setUnreadCount((prev) => prev + 1);
+      throw error;
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       unreadCount,
@@ -224,10 +261,20 @@ export const NotificationProvider = ({ children }) => {
       requestPermission,
       markRead,
       markAllRead,
+      dismiss,
       activeConversationId,
       setActiveConversationId,
     }),
-    [unreadCount, notifications, permission, requestPermission, markRead, markAllRead, activeConversationId],
+    [
+      unreadCount,
+      notifications,
+      permission,
+      requestPermission,
+      markRead,
+      markAllRead,
+      dismiss,
+      activeConversationId,
+    ],
   );
 
   return (

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
-  Bell,
   LogOut,
   Menu,
   MessageCircle,
@@ -13,10 +12,9 @@ import {
 import clsx from 'clsx';
 
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { useNotifications } from '../../contexts/NotificationContext.jsx';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside.js';
 import Avatar from '../common/Avatar.jsx';
-import Badge from '../common/Badge.jsx';
+import NotificationsDropdown from './NotificationsDropdown.jsx';
 
 /**
  * Navbar — global top bar shown by `MainLayout` (and therefore by the
@@ -34,9 +32,8 @@ import Badge from '../common/Badge.jsx';
  *   - The mobile drawer is a separate `<aside>` toggled by a hamburger;
  *     it intentionally renders the same nav links so screen-reader and
  *     keyboard users get a consistent target list at every viewport.
- *   - The notification bell links to `/chat` (Step 32 will replace
- *     this with the dedicated notifications panel). The badge is
- *     wired to `unreadCount` from NotificationContext today.
+ *   - The notification bell delegates to `NotificationsDropdown`, which
+ *     owns its own popover (recent items, "Mark all read", "View all").
  */
 
 const navLinkClass = ({ isActive }) =>
@@ -49,7 +46,6 @@ const navLinkClass = ({ isActive }) =>
 
 const Navbar = () => {
   const { user, isAdmin, logout } = useAuth();
-  const { unreadCount } = useNotifications();
   const location = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -112,18 +108,7 @@ const Navbar = () => {
 
         {/* Desktop right cluster */}
         <div className="flex items-center gap-1 sm:gap-2">
-          <Link
-            to="/chat"
-            aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
-            className="relative rounded-full p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
-          >
-            <Bell className="h-5 w-5" aria-hidden="true" />
-            {unreadCount > 0 ? (
-              <span className="absolute -top-0.5 -right-0.5">
-                <Badge count={unreadCount} variant="danger" />
-              </span>
-            ) : null}
-          </Link>
+          <NotificationsDropdown />
 
           {/* Avatar dropdown (desktop) */}
           <div className="relative hidden md:block" ref={menuRef}>
