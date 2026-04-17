@@ -11,6 +11,7 @@ import { sanitizeRequest } from './middlewares/sanitize.middleware.js';
 import { globalLimiter } from './middlewares/rateLimiters.js';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 import authRoutes from './routes/auth.routes.js';
+import conversationRoutes from './routes/conversation.routes.js';
 
 validateEnv();
 
@@ -56,8 +57,8 @@ app.get('/api/health', (_req, res) => {
 
 // 10) Feature routes.
 app.use('/api/auth', authRoutes); // STEP 3
+app.use('/api/conversations', conversationRoutes); // STEP 6
 //     app.use('/api/users', userRoutes);         // STEP 8
-//     app.use('/api/conversations', convoRoutes);// STEP 6
 //     app.use('/api/messages', messageRoutes);   // STEP 7
 //     app.use('/api/notifications', notifyRoutes);// STEP 16
 //     app.use('/api/upload', uploadRoutes);      // STEP 8
