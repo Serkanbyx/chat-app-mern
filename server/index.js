@@ -10,6 +10,7 @@ import { connectDB } from './config/db.js';
 import { sanitizeRequest } from './middlewares/sanitize.middleware.js';
 import { globalLimiter } from './middlewares/rateLimiters.js';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
+import authRoutes from './routes/auth.routes.js';
 
 validateEnv();
 
@@ -53,8 +54,8 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
 
-// 10) Feature routes — mounted in later STEPS.
-//     app.use('/api/auth', authRoutes);          // STEP 3
+// 10) Feature routes.
+app.use('/api/auth', authRoutes); // STEP 3
 //     app.use('/api/users', userRoutes);         // STEP 8
 //     app.use('/api/conversations', convoRoutes);// STEP 6
 //     app.use('/api/messages', messageRoutes);   // STEP 7
