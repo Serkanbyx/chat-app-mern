@@ -36,8 +36,13 @@ export const updateGroup = async (id, payload) => {
   return data;
 };
 
-export const addMembers = async (id, members) => {
-  const { data } = await api.post(`/conversations/${id}/members`, { members });
+/**
+ * Server contract: `POST /:id/members` expects `{ userIds: [...] }`
+ * (see `validateAddMembers`). Keeping the client parameter name aligned
+ * avoids accidental drift between the wire payload and the call site.
+ */
+export const addMembers = async (id, userIds) => {
+  const { data } = await api.post(`/conversations/${id}/members`, { userIds });
   return data;
 };
 

@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import ChatHeader from '../../components/chat/ChatHeader.jsx';
+import GroupSettingsModal from '../../components/chat/GroupSettingsModal.jsx';
 import MessageComposer from '../../components/chat/MessageComposer.jsx';
 import MessagesList from '../../components/chat/MessagesList.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -81,6 +82,10 @@ const ChatPage = () => {
    * "reply" affordance on `MessageBubble` (Step 29) only has to call
    * `setReplyTo(message)` to wire the composer's quoted preview. */
   const [replyTo, setReplyTo] = useState(null);
+  /* Group-settings panel visibility — owned here so the panel can read
+   * the live `conversation` slice and ChatHeader stays a presentational
+   * trigger. */
+  const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
 
   const listRef = useRef(null);
 
@@ -102,6 +107,7 @@ const ChatPage = () => {
     setIsLoadingInitial(true);
     setIsLoadingOlder(false);
     setReplyTo(null);
+    setIsGroupSettingsOpen(false);
   }, [conversationId]);
 
   /* ---------- Initial fetch (conversation + first page) ----------
@@ -320,6 +326,76 @@ const ChatPage = () => {
     };
   }, [conversationId, currentUserId, emit, socket]);
 
+  /* ---------- Group-lifecycle wiring ----------
+   * STEP 30 wires the open `GroupSettingsModal` against the live
+   * conversation slice. When ANOTHER admin / member triggers a change,
+   * the server fan-out lets this surface stay correct without forcing
+   * a re-fetch:
+   *   - `group:updated` patches name/avatar in place.
+   *   - `group:adminChanged` patches the `admins` array, which flips
+   *     role badges (and may downgrade the current viewer's controls).
+   *   - `group:memberAdded` / `group:memberRemoved` need fresh
+   *     populated participant docs; we re-fetch the conversation in
+   *     those cases instead of guessing populated fields client-side.
+   *   - `group:youWereRemoved` is handled by the Sidebar — it removes
+   *     the conversation and navigates us out, so no extra wiring here.
+   */
+  useEffect(() => {
+    if (!socket || !conversationId) return undefined;
+
+    const handleGroupUpdated = ({ conversationId: cid, name, avatarUrl }) => {
+      if (!cid || String(cid) !== conversationId) return;
+      setConversation((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (typeof name === 'string') next.name = name;
+        if (typeof avatarUrl === 'string') next.avatarUrl = avatarUrl;
+        return next;
+      });
+    };
+
+    const handleAdminChanged = ({ conversationId: cid, userId, isAdmin }) => {
+      if (!cid || String(cid) !== conversationId) return;
+      setConversation((prev) => {
+        if (!prev) return prev;
+        const current = (prev.admins || []).map((id) => String(id));
+        const target = String(userId);
+        const exists = current.includes(target);
+        let nextAdmins = current;
+        if (isAdmin && !exists) nextAdmins = [...current, target];
+        if (!isAdmin && exists) {
+          nextAdmins = current.filter((id) => id !== target);
+        }
+        if (nextAdmins === current) return prev;
+        return { ...prev, admins: nextAdmins };
+      });
+    };
+
+    const handleMembershipChange = async ({ conversationId: cid }) => {
+      if (!cid || String(cid) !== conversationId) return;
+      try {
+        const result = await conversationService.getConversation(conversationId);
+        const fresh = result?.data;
+        if (fresh) setConversation(fresh);
+      } catch {
+        // Best-effort refresh — a transient failure simply means the
+        // panel will look slightly stale until the next mutation.
+      }
+    };
+
+    socket.on('group:updated', handleGroupUpdated);
+    socket.on('group:adminChanged', handleAdminChanged);
+    socket.on('group:memberAdded', handleMembershipChange);
+    socket.on('group:memberRemoved', handleMembershipChange);
+
+    return () => {
+      socket.off('group:updated', handleGroupUpdated);
+      socket.off('group:adminChanged', handleAdminChanged);
+      socket.off('group:memberAdded', handleMembershipChange);
+      socket.off('group:memberRemoved', handleMembershipChange);
+    };
+  }, [conversationId, socket]);
+
   /* ---------- Optimistic-send wiring (consumed by MessageComposer) ----------
    * We keep these helpers here (rather than passing `setMessages` down)
    * so the composer's prop surface stays narrow and so future
@@ -355,6 +431,27 @@ const ChatPage = () => {
   }, []);
 
   const handleCancelReply = useCallback(() => setReplyTo(null), []);
+
+  /* ---------- Group settings modal wiring ----------
+   * `handleConversationUpdated` is the modal's writeback channel:
+   * each successful admin action on the server returns the updated
+   * conversation document; we patch local state here so the
+   * `ChatHeader` / `MessagesList` / modal itself all reflect the new
+   * shape without waiting for the broadcast echo. The list-level
+   * `upsertConversation` is handled inside the modal so the sidebar
+   * stays consistent even if this page is later refactored away. */
+  const handleOpenGroupSettings = useCallback(() => {
+    setIsGroupSettingsOpen(true);
+  }, []);
+
+  const handleCloseGroupSettings = useCallback(() => {
+    setIsGroupSettingsOpen(false);
+  }, []);
+
+  const handleConversationUpdated = useCallback((updated) => {
+    if (!updated?._id) return;
+    setConversation((prev) => (prev ? { ...prev, ...updated } : updated));
+  }, []);
 
   /* ---------- Bubble action wiring (Step 29) ----------
    * These callbacks are passed down to MessagesList → MessageBubble.
@@ -668,6 +765,7 @@ const ChatPage = () => {
       <ChatHeader
         conversation={conversation}
         isLoading={isLoadingInitial}
+        onOpenGroupSettings={handleOpenGroupSettings}
       />
 
       <MessagesList
@@ -699,6 +797,13 @@ const ChatPage = () => {
         onAfterSend={handleAfterSend}
         disabled={composerDisabled}
         disabledReason={composerDisabledReason}
+      />
+
+      <GroupSettingsModal
+        open={isGroupSettingsOpen}
+        conversation={conversation}
+        onClose={handleCloseGroupSettings}
+        onConversationUpdated={handleConversationUpdated}
       />
     </div>
   );
