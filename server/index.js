@@ -15,6 +15,8 @@ import conversationRoutes from './routes/conversation.routes.js';
 import messageRoutes, {
   conversationMessageRouter,
 } from './routes/message.routes.js';
+import userRoutes from './routes/user.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
 
 validateEnv();
 
@@ -66,9 +68,9 @@ app.use('/api/auth', authRoutes); // STEP 3
 app.use('/api/conversations/:id/messages', conversationMessageRouter); // STEP 7
 app.use('/api/conversations', conversationRoutes); // STEP 6
 app.use('/api/messages', messageRoutes); // STEP 7
-//     app.use('/api/users', userRoutes);         // STEP 8
+app.use('/api/users', userRoutes); // STEP 8
+app.use('/api/upload', uploadRoutes); // STEP 8
 //     app.use('/api/notifications', notifyRoutes);// STEP 16
-//     app.use('/api/upload', uploadRoutes);      // STEP 8
 //     app.use('/api/admin', adminRoutes);        // STEP 17
 
 // 11) 404 + error handler MUST be last.
