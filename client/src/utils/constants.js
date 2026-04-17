@@ -91,6 +91,30 @@ export const AUTH_RULES = Object.freeze({
   PASSWORD_COMPLEXITY: /^(?=.*[A-Za-z])(?=.*\d).+$/,
 });
 
+/**
+ * Profile field caps mirrored from `server/utils/constants.js`.
+ * Driving the Bio character counter from a single constant means a
+ * server-side bump (e.g. 200 → 240) is a one-line client change.
+ */
+export const PROFILE_RULES = Object.freeze({
+  BIO_MAX_LENGTH: 200,
+  AVATAR_MAX_SIZE_MB: 5,
+});
+
+/**
+ * Mirrors `REPORT_REASONS` on the server. The label column is the
+ * user-facing copy shown in `ReportModal` — keep the `value` column in
+ * lock-step with the server enum or the `/reports` POST will 422.
+ */
+export const REPORT_REASONS = Object.freeze([
+  { value: 'spam', label: 'Spam or scam' },
+  { value: 'harassment', label: 'Harassment or hate speech' },
+  { value: 'inappropriate', label: 'Inappropriate content' },
+  { value: 'other', label: 'Something else' },
+]);
+
+export const REPORT_DETAILS_MAX_LENGTH = 500;
+
 /* ------------------------------------------------------------------
  * Conversation rules
  *
