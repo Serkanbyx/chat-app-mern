@@ -117,6 +117,34 @@ export const ChatStateProvider = ({ children }) => {
     setActiveConversationId((prev) => (prev === target ? null : prev));
   }, []);
 
+  /**
+   * Per-conversation unread helpers — small, specific primitives that
+   * spare consumers from juggling `setConversations` themselves. The
+   * sidebar bumps unread on every incoming `message:new` (when the
+   * conversation isn't focused) and resets it the moment the user opens
+   * the chat (Step 27 will also reset on `conversation:readBy` for the
+   * current user).
+   */
+  const incrementUnread = useCallback((id, by = 1) => {
+    if (!id) return;
+    const target = idOf(id);
+    setConversations((prev) =>
+      prev.map((c) =>
+        idOf(c) === target
+          ? { ...c, unreadCount: Math.max(0, Number(c.unreadCount) || 0) + by }
+          : c,
+      ),
+    );
+  }, []);
+
+  const resetUnread = useCallback((id) => {
+    if (!id) return;
+    const target = idOf(id);
+    setConversations((prev) =>
+      prev.map((c) => (idOf(c) === target ? { ...c, unreadCount: 0 } : c)),
+    );
+  }, []);
+
   const value = useMemo(
     () => ({
       conversations,
@@ -126,6 +154,8 @@ export const ChatStateProvider = ({ children }) => {
       setActiveConversationId,
       upsertConversation,
       removeConversation,
+      incrementUnread,
+      resetUnread,
       refreshConversations: fetchConversations,
     }),
     [
@@ -135,6 +165,8 @@ export const ChatStateProvider = ({ children }) => {
       activeConversationId,
       upsertConversation,
       removeConversation,
+      incrementUnread,
+      resetUnread,
       fetchConversations,
     ],
   );
