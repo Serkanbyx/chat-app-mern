@@ -1,0 +1,51 @@
+# =============================================================================
+# Netlify build configuration for the Chat App client (Vite + React 19).
+# Repo root for Netlify must be set to `client/` (Site settings → Build & deploy).
+# =============================================================================
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Pin Node so Netlify doesn't drift to an older default LTS.
+  NODE_VERSION = "20"
+  # Avoid devDependency pruning surprises on Netlify.
+  NPM_FLAGS = "--no-audit --no-fund"
+
+# -----------------------------------------------------------------------------
+# SPA fallback — also covered by `public/_redirects`. Kept here as a backup
+# so the rule survives even if the public file is accidentally removed.
+# -----------------------------------------------------------------------------
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# -----------------------------------------------------------------------------
+# Security headers — defense-in-depth on top of helmet on the API.
+# CSP is intentionally permissive for `connect-src` so the client can talk
+# to the Render API + WebSocket. Tighten further if you self-host fonts/images.
+# -----------------------------------------------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+
+# -----------------------------------------------------------------------------
+# Long-cache fingerprinted Vite assets; HTML stays no-cache so deploys are
+# picked up immediately by returning visitors.
+# -----------------------------------------------------------------------------
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

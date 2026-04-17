@@ -1,0 +1,44 @@
+# =============================================================================
+# Render Blueprint — Infrastructure-as-code for the Chat App backend.
+# Apply via Dashboard → Blueprints → New from existing repo, or `render blueprint`.
+# Secrets (`sync: false`) MUST be filled in the Render UI after the first sync.
+# =============================================================================
+
+services:
+  - type: web
+    name: chat-app-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: server
+    branch: main
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT automatically; the server already reads process.env.PORT.
+      - key: CLIENT_URL
+        sync: false # e.g. https://your-site.netlify.app
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true # Render generates a strong random value once.
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "5"
