@@ -20,6 +20,7 @@ import messageRoutes, {
 import userRoutes from './routes/user.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 validateEnv();
 
@@ -74,7 +75,7 @@ app.use('/api/messages', messageRoutes); // STEP 7
 app.use('/api/users', userRoutes); // STEP 8
 app.use('/api/upload', uploadRoutes); // STEP 8
 app.use('/api/notifications', notificationRoutes); // STEP 16
-//     app.use('/api/admin', adminRoutes);        // STEP 17
+app.use('/api/admin', adminRoutes); // STEP 17
 
 // 11) 404 + error handler MUST be last.
 app.use(notFoundHandler);
