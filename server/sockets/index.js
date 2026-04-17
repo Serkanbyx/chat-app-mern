@@ -6,27 +6,34 @@ import {
   addUserSocket,
   removeUserSocket,
 } from './onlineUsers.js';
-
-/**
- * Naming convention for rooms:
- *   - `user:<userId>`        — fan-out to every device of one user
- *                              (notifications, force-disconnect, etc.).
- *   - `conv:<conversationId>` — fan-out to all participants of a chat.
- *
- * The server is the single source of truth for room membership. We
- * NEVER call `socket.join(client-supplied room)` — every join is the
- * result of a DB-verified participant lookup. This makes it impossible
- * for a malicious client to subscribe to a room they don't belong to.
- */
-const userRoom = (userId) => `user:${userId}`;
-const convRoom = (conversationId) => `conv:${conversationId}`;
+import {
+  broadcastUserOffline,
+  broadcastUserOnline,
+  getShowOnlineStatus,
+  registerPresenceHandlers,
+} from './presence.socket.js';
+import {
+  clearTypingForUser,
+  registerTypingHandlers,
+} from './typing.socket.js';
+import { convRoom, userRoom } from './rooms.js';
 
 /**
  * Wire connection / disconnection lifecycle and the per-feature event
- * handlers (presence, typing, messaging, groups). Per-feature handlers
- * are registered in subsequent steps; this file owns the connection
- * lifecycle so that the membership / presence invariants are enforced
- * in exactly one place.
+ * handlers (presence, typing, messaging, groups). This file owns the
+ * connection lifecycle so that the membership and presence invariants
+ * are enforced in exactly one place. Per-feature behaviour lives in
+ * its own module under `sockets/`.
+ *
+ * Room model recap (see `sockets/rooms.js`):
+ *   - `user:<userId>`         — every device of one user
+ *   - `conv:<conversationId>` — every participant of a chat
+ *
+ * The server is the single source of truth for room membership. We
+ * NEVER call `socket.join(client-supplied room)` — every join is the
+ * result of a DB-verified participant lookup, which makes it
+ * impossible for a malicious client to subscribe to a room they don't
+ * belong to.
  */
 export const registerSocketHandlers = (io) => {
   io.use(socketAuthMiddleware);
@@ -38,11 +45,12 @@ export const registerSocketHandlers = (io) => {
       addUserSocket(userId, socket.id);
 
       // Personal room — used for direct fan-out to all of a user's
-      // devices (e.g. notifications, admin force-disconnect).
+      // devices (e.g. notifications, admin force-disconnect) and for
+      // `.except(userRoom(...))` exclusions on broadcasts they triggered.
       socket.join(userRoom(userId));
 
       // Auto-subscribe to every conversation room the user belongs to.
-      // We pull only `_id` to keep the payload tiny on users who are in
+      // Pulling only `_id` keeps the payload tiny on users who are in
       // hundreds of conversations.
       const conversations = await Conversation.find(
         { participants: userId, isActive: true },
@@ -52,21 +60,36 @@ export const registerSocketHandlers = (io) => {
       const roomNames = conversations.map((c) => convRoom(c._id));
       if (roomNames.length > 0) socket.join(roomNames);
 
-      // Flip presence flag. We use `findByIdAndUpdate` (not `save`) to
-      // avoid running the full validation pipeline on a hot path that
-      // only touches two fields.
-      await User.findByIdAndUpdate(userId, {
-        isOnline: true,
-        lastSeenAt: new Date(),
-      });
+      // Flip presence flag and read the privacy preference in one
+      // round-trip. `findByIdAndUpdate` keeps us off the full mongoose
+      // validation pipeline on a hot path that only touches two fields.
+      const updated = await User.findByIdAndUpdate(
+        userId,
+        { isOnline: true, lastSeenAt: new Date() },
+        { new: true, projection: 'preferences.showOnlineStatus' },
+      ).lean();
 
-      // Notify other participants. We exclude this user's own personal
-      // room (their other tabs already know they're online — they're
-      // the source of the event). STEP 14 will harden this against the
-      // `showOnlineStatus` privacy setting.
-      for (const name of roomNames) {
-        socket.to(name).emit('userOnline', { userId });
-      }
+      const showOnlineStatus =
+        updated?.preferences?.showOnlineStatus !== false;
+
+      // Cache on the socket so the disconnect handler doesn't need a
+      // second lookup. Acceptable staleness window: from connect to
+      // disconnect of THIS socket — toggling the setting takes effect
+      // on the next socket lifecycle event, which matches REST behaviour.
+      socket.data.showOnlineStatus = showOnlineStatus;
+
+      // STEP 14 — privacy-aware presence broadcast. Skipped entirely
+      // when the user has opted out of `showOnlineStatus`.
+      broadcastUserOnline(io, userId, roomNames, showOnlineStatus);
+
+      // Per-feature handlers. Each module is responsible for its own
+      // payload validation, authorisation and error handling so a bug
+      // in one feature can't bring down the whole socket layer.
+      registerPresenceHandlers(io, socket); // STEP 14
+      registerTypingHandlers(io, socket); // STEP 14
+      // STEP 15 will register:
+      //   registerMessageHandlers(io, socket);
+      //   registerGroupHandlers(io, socket);
 
       if (!isProduction) {
         console.log(
@@ -84,21 +107,13 @@ export const registerSocketHandlers = (io) => {
       return;
     }
 
-    // Per-feature handlers wired in later steps:
-    //   STEP 14 — presence + typing
-    //   STEP 15 — messaging, reactions, read, group events
-    // They will be imported and called here as:
-    //   registerPresenceHandlers(io, socket);
-    //   registerTypingHandlers(io, socket);
-    //   registerMessageHandlers(io, socket);
-    //   registerGroupHandlers(io, socket);
-
     socket.on('disconnect', async (reason) => {
       try {
         const remaining = removeUserSocket(userId, socket.id);
 
         // Only the LAST socket dropping flips the user offline. While
-        // any other tab/device is still connected, presence stays on.
+        // any other tab/device is still connected, presence stays on
+        // and typing state for those other tabs remains valid.
         if (remaining === 0) {
           const lastSeenAt = new Date();
           await User.findByIdAndUpdate(userId, {
@@ -113,13 +128,27 @@ export const registerSocketHandlers = (io) => {
             { participants: userId, isActive: true },
             '_id',
           ).lean();
+          const roomNames = conversations.map((c) => convRoom(c._id));
 
-          for (const conv of conversations) {
-            io.to(convRoom(conv._id)).emit('userOffline', {
-              userId,
-              lastSeenAt,
-            });
-          }
+          // Re-read the privacy preference rather than reusing the
+          // cached value — the user may have toggled the setting after
+          // connecting from this socket. Falls back to `true` if the
+          // user document is gone (deleted) so we don't strand other
+          // participants showing them as eternally online.
+          const showOnlineStatus = await getShowOnlineStatus(userId);
+
+          broadcastUserOffline(
+            io,
+            userId,
+            roomNames,
+            lastSeenAt,
+            showOnlineStatus,
+          );
+
+          // Drop any typing entries this user still owns. Without this
+          // a crashed client (no `typing:stop` sent) would leave its
+          // indicator stuck for the 5-second auto-stop fallback.
+          clearTypingForUser(io, userId);
         }
 
         if (!isProduction) {
