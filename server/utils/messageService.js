@@ -62,6 +62,67 @@ const isAllowedCloudinaryUrl = (url) => {
 };
 
 /**
+ * Strip control characters, neutralize the four HTML "structural" chars
+ * (`< > & "`), collapse whitespace, and trim. We NEVER want a server-built
+ * system message to end up containing markup-shaped substrings derived
+ * from a user-controlled value (display name, group name, etc.) — even
+ * though clients render `text` as plain text today, defence-in-depth is
+ * cheap here.
+ */
+const sanitizePlainSegment = (value, fallback = '') => {
+  if (typeof value !== 'string') return fallback;
+  const cleaned = value
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/[<>&"]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback;
+};
+
+/**
+ * Build a server-controlled system-message string. Every variable segment
+ * is passed through `sanitizePlainSegment` so user-supplied display names
+ * cannot smuggle markup or control characters into the payload, and the
+ * final result is hard-capped at MESSAGE_TEXT_MAX_LENGTH.
+ */
+export const buildSystemMessageText = (template, vars = {}) => {
+  if (typeof template !== 'string') return '';
+  const out = template.replace(/\{(\w+)\}/g, (_match, key) =>
+    sanitizePlainSegment(vars[key], ''),
+  );
+  return out.slice(0, MESSAGE_TEXT_MAX_LENGTH);
+};
+
+/**
+ * Persist a system message (`type: 'system'`, `sender: null`). Used by
+ * group lifecycle flows: rename, member add/remove, leave, admin
+ * promote/demote. The post-save hook on Message will refresh the parent
+ * Conversation's `lastMessage` snapshot for free, so the sidebar preview
+ * reflects the latest event without any extra plumbing.
+ *
+ * Unread counts are intentionally NOT bumped by system messages (the
+ * post-save hook already short-circuits when `sender` is null).
+ */
+export const createSystemMessage = async ({ conversationId, text }) => {
+  const cid = toIdString(conversationId);
+  if (!cid || !isValidObjectId(cid)) {
+    throw ApiError.badRequest('Invalid conversation id');
+  }
+
+  const safeText = sanitizePlainSegment(text);
+  if (!safeText) {
+    throw ApiError.badRequest('System message text is required');
+  }
+
+  return Message.create({
+    conversationId: cid,
+    sender: null,
+    type: MESSAGE_TYPES.SYSTEM,
+    text: safeText.slice(0, MESSAGE_TEXT_MAX_LENGTH),
+  });
+};
+
+/**
  * Resolve the bidirectional block state between the viewer and the OTHER
  * participant of a direct conversation. Returns the earliest `blockedAt`
  * across both directions — read-time enforcement uses it as the cutoff

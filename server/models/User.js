@@ -155,5 +155,10 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
 // query selective even as the user base grows.
 userSchema.index({ 'blockedUsers.user': 1 });
 
+// Hot-path index for the Message post-save hook (STEP 10): "of these
+// recipients, who has muted this conversation?". Without this index the
+// hook degrades to a COLLSCAN per message send.
+userSchema.index({ mutedConversations: 1 });
+
 export const User = model('User', userSchema);
 export default User;

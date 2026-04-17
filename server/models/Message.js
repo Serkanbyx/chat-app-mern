@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Conversation } from './Conversation.js';
+import { User } from './User.js';
 import {
   MESSAGE_TYPES,
   MESSAGE_DELETED_FOR,
@@ -198,10 +199,30 @@ messageSchema.post('save', async function (doc) {
 
     if (doc.sender) {
       const senderId = doc.sender.toString();
+      const recipientIds = conversation.participants
+        .map((p) => p.toString())
+        .filter((pid) => pid !== senderId);
+
+      // Mute suppression (STEP 10): users who muted this conversation do
+      // NOT receive an unread bump. Their existing badge value is
+      // preserved (any stale count from before mute stays as-is). Sound
+      // and browser notifications are suppressed at the socket / client
+      // layer using the same `mutedConversations` array.
+      let mutedSet = new Set();
+      if (recipientIds.length > 0) {
+        const mutedRows = await User.find(
+          {
+            _id: { $in: recipientIds },
+            mutedConversations: doc.conversationId,
+          },
+          { _id: 1 },
+        ).lean();
+        mutedSet = new Set(mutedRows.map((u) => u._id.toString()));
+      }
+
       const inc = {};
-      for (const participant of conversation.participants) {
-        const pid = participant.toString();
-        if (pid === senderId) continue;
+      for (const pid of recipientIds) {
+        if (mutedSet.has(pid)) continue;
         inc[`unreadCounts.${pid}`] = 1;
       }
       if (Object.keys(inc).length > 0) update.$inc = inc;

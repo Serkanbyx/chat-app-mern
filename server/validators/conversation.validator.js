@@ -1,4 +1,4 @@
-import { body } from 'express-validator';
+import { body, query } from 'express-validator';
 import { validate } from '../middlewares/validate.middleware.js';
 import {
   GROUP_NAME_MAX_LENGTH,
@@ -63,5 +63,18 @@ export const validateAddMembers = [
   body('userIds.*')
     .isMongoId()
     .withMessage('Every userId must be a valid id'),
+  validate,
+];
+
+/**
+ * Optional `?archived=true|false` switch for the conversation list.
+ * Strict string match — express-validator's loose `isBoolean()` would let
+ * `1` / `0` slip through and complicate the controller branch.
+ */
+export const validateArchivedQuery = [
+  query('archived')
+    .optional()
+    .isIn(['true', 'false'])
+    .withMessage("archived must be 'true' or 'false'"),
   validate,
 ];

@@ -8,6 +8,10 @@ import {
   assertParticipant,
   assertGroupAdmin,
 } from '../utils/conversationService.js';
+import {
+  createSystemMessage,
+  buildSystemMessageText,
+} from '../utils/messageService.js';
 import { parsePagination, buildPageMeta } from '../utils/pagination.js';
 import {
   CONVERSATION_TYPES,
@@ -126,6 +130,14 @@ export const getConversations = asyncHandler(async (req, res) => {
     maxLimit: 50,
   });
 
+  // Archive filter (STEP 10): default view excludes archived chats; pass
+  // `?archived=true` to see the archived bucket. Validation of the
+  // boolean-like query param happens in `validateArchivedQuery`.
+  const wantsArchived = req.query.archived === 'true';
+  const archivedIds = (req.user.archivedConversations || []).map(
+    (id) => new Types.ObjectId(String(id)),
+  );
+
   // Build the bidirectional set of "users I can no longer see in the
   // sidebar": users I blocked + users who blocked me. Direct chats with
   // any of them are hidden from the LIST view (the conversation itself
@@ -156,6 +168,19 @@ export const getConversations = asyncHandler(async (req, res) => {
         participants: { $in: hiddenUserIds },
       },
     ];
+  }
+
+  if (wantsArchived) {
+    // No archived chats → nothing to return; short-circuit before hitting Mongo.
+    if (archivedIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: { items: [], ...buildPageMeta({ total: 0, page, limit }) },
+      });
+    }
+    filter._id = { $in: archivedIds };
+  } else if (archivedIds.length > 0) {
+    filter._id = { $nin: archivedIds };
   }
 
   const [items, total] = await Promise.all([
@@ -252,12 +277,18 @@ export const updateConversation = asyncHandler(async (req, res) => {
 
   const ALLOWED = ['name', 'avatarUrl'];
   let touched = false;
+  let renamedFrom = null;
+  let renamedTo = null;
   for (const key of ALLOWED) {
     if (Object.prototype.hasOwnProperty.call(req.body, key)) {
       const value = req.body[key];
       if (key === 'name') {
         const trimmed = typeof value === 'string' ? value.trim() : '';
         if (trimmed.length === 0) continue;
+        if (trimmed !== conversation.name) {
+          renamedFrom = conversation.name;
+          renamedTo = trimmed;
+        }
         conversation.name = trimmed;
       } else {
         conversation.avatarUrl = typeof value === 'string' ? value : '';
@@ -271,6 +302,19 @@ export const updateConversation = asyncHandler(async (req, res) => {
   }
 
   await conversation.save();
+
+  // System message must be emitted AFTER the save so the post-save hook
+  // sees the new name on the parent doc when refreshing lastMessage.
+  if (renamedTo) {
+    await createSystemMessage({
+      conversationId: conversation._id,
+      text: buildSystemMessageText(
+        '{actor} renamed the group from "{from}" to "{to}"',
+        { actor: req.user.displayName, from: renamedFrom, to: renamedTo },
+      ),
+    });
+  }
+
   const data = await populateAndSerialize(conversation, req.user._id);
   res.status(200).json({ success: true, data });
 });
@@ -304,6 +348,22 @@ export const addMembers = asyncHandler(async (req, res) => {
 
   conversation.participants.push(...requestedIds);
   await conversation.save();
+
+  // System message per added user — readable timeline event for everyone
+  // already in the group. Display names are sanitized server-side inside
+  // `buildSystemMessageText`.
+  const addedDocs = await User.find({ _id: { $in: requestedIds } })
+    .select('displayName')
+    .lean();
+  for (const added of addedDocs) {
+    await createSystemMessage({
+      conversationId: conversation._id,
+      text: buildSystemMessageText('{actor} added {target} to the group', {
+        actor: req.user.displayName,
+        target: added.displayName,
+      }),
+    });
+  }
 
   const data = await populateAndSerialize(conversation, req.user._id);
   res.status(200).json({ success: true, data });
@@ -394,6 +454,30 @@ export const removeMember = asyncHandler(async (req, res) => {
   }
 
   const updated = await removeParticipant({ conversation, targetId });
+
+  // System message: distinguish self-leave from admin-kick so the timeline
+  // reads naturally. Skip emission when the group was tombstoned (the
+  // removal left fewer than 2 participants — there's nobody left to read it).
+  if (updated?.isActive) {
+    if (isSelf) {
+      await createSystemMessage({
+        conversationId: updated._id,
+        text: buildSystemMessageText('{actor} left the group', {
+          actor: req.user.displayName,
+        }),
+      });
+    } else {
+      const target = await User.findById(targetId).select('displayName').lean();
+      await createSystemMessage({
+        conversationId: updated._id,
+        text: buildSystemMessageText('{actor} removed {target} from the group', {
+          actor: req.user.displayName,
+          target: target?.displayName,
+        }),
+      });
+    }
+  }
+
   await updated.populate({
     path: 'participants',
     select: PARTICIPANT_PROJECTION,
@@ -432,6 +516,61 @@ export const promoteAdmin = asyncHandler(async (req, res) => {
     { $addToSet: { admins: new Types.ObjectId(userId) } },
     { new: true },
   ).populate({ path: 'participants', select: PARTICIPANT_PROJECTION });
+
+  const target = await User.findById(userId).select('displayName').lean();
+  await createSystemMessage({
+    conversationId: updated._id,
+    text: buildSystemMessageText('{actor} promoted {target} to admin', {
+      actor: req.user.displayName,
+      target: target?.displayName,
+    }),
+  });
+
+  res
+    .status(200)
+    .json({ success: true, data: serializeConversation(updated, req.user._id) });
+});
+
+// DELETE /api/conversations/:id/admins/:userId
+export const demoteAdmin = asyncHandler(async (req, res) => {
+  const conversation = await Conversation.findById(req.params.id);
+  assertParticipant(conversation, req.user._id);
+
+  if (conversation.type !== CONVERSATION_TYPES.GROUP) {
+    throw ApiError.badRequest('Only group conversations have admins');
+  }
+  assertGroupAdmin(conversation, req.user._id);
+
+  const { userId } = req.params;
+  const isAdmin = conversation.admins.some((a) => idEquals(a, userId));
+  if (!isAdmin) {
+    throw ApiError.badRequest('User is not an admin of this group');
+  }
+
+  // Last-admin protection (mirrors STEP 6): a group MUST always retain at
+  // least one admin. Demoting yourself when you are the sole admin is a
+  // foot-gun we close here — the user can leave the group instead, which
+  // triggers automatic promotion of the next-joined participant.
+  if (conversation.admins.length === 1) {
+    throw ApiError.badRequest(
+      'Cannot demote the last admin; promote another admin first or leave the group',
+    );
+  }
+
+  const updated = await Conversation.findByIdAndUpdate(
+    conversation._id,
+    { $pull: { admins: new Types.ObjectId(userId) } },
+    { new: true },
+  ).populate({ path: 'participants', select: PARTICIPANT_PROJECTION });
+
+  const target = await User.findById(userId).select('displayName').lean();
+  await createSystemMessage({
+    conversationId: updated._id,
+    text: buildSystemMessageText('{actor} removed admin from {target}', {
+      actor: req.user.displayName,
+      target: target?.displayName,
+    }),
+  });
 
   res
     .status(200)
@@ -505,6 +644,17 @@ export const deleteConversation = asyncHandler(async (req, res) => {
     conversation,
     targetId: req.user._id,
   });
+
+  // Only emit a "left the group" system event when there's actually a
+  // group left to read it. Tombstoned (isActive: false) groups skip it.
+  if (updated?.isActive) {
+    await createSystemMessage({
+      conversationId: updated._id,
+      text: buildSystemMessageText('{actor} left the group', {
+        actor: req.user.displayName,
+      }),
+    });
+  }
 
   res.status(200).json({
     success: true,

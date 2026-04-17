@@ -8,6 +8,7 @@ import {
   addMembers,
   removeMember,
   promoteAdmin,
+  demoteAdmin,
   toggleMute,
   toggleArchive,
   deleteConversation,
@@ -22,13 +23,14 @@ import {
   validateCreateGroup,
   validateUpdateConversation,
   validateAddMembers,
+  validateArchivedQuery,
 } from '../validators/conversation.validator.js';
 
 const router = Router();
 
 router.use(protect);
 
-router.get('/', validatePagination, getConversations);
+router.get('/', validatePagination, validateArchivedQuery, getConversations);
 
 router.post('/direct', validateCreateDirect, createDirect);
 router.post('/group', validateCreateGroup, createGroup);
@@ -60,6 +62,12 @@ router.post(
   validateObjectId('id'),
   validateObjectId('userId'),
   promoteAdmin,
+);
+router.delete(
+  '/:id/admins/:userId',
+  validateObjectId('id'),
+  validateObjectId('userId'),
+  demoteAdmin,
 );
 
 router.post('/:id/mute', validateObjectId('id'), toggleMute);
