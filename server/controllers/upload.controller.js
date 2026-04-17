@@ -1,24 +1,10 @@
-import { cloudinary, streamUpload } from '../config/cloudinary.js';
+import { streamUpload, safeDestroy } from '../config/cloudinary.js';
 import { User } from '../models/User.js';
 import { ApiError } from '../utils/apiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const AVATAR_FOLDER = 'chat-app/avatars';
 const MESSAGE_FOLDER = 'chat-app/messages';
-
-/**
- * Best-effort destruction of a previous Cloudinary asset. We log and
- * swallow failures because a billing-side cleanup error must NEVER break
- * the user-facing flow that already succeeded.
- */
-const safeDestroy = async (publicId) => {
-  if (!publicId) return;
-  try {
-    await cloudinary.uploader.destroy(publicId, { invalidate: true });
-  } catch (error) {
-    console.warn(`[upload] failed to destroy ${publicId}:`, error?.message);
-  }
-};
 
 // POST /api/upload/avatar
 export const uploadAvatarController = asyncHandler(async (req, res) => {

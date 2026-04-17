@@ -45,4 +45,21 @@ export const streamUpload = (buffer, folder) =>
     streamifier.createReadStream(buffer).pipe(uploadStream);
   });
 
+/**
+ * Best-effort destruction of a Cloudinary asset by `publicId`. Always
+ * resolves — billing-side cleanup failures must NEVER break a user-facing
+ * flow that already succeeded (avatar replace, message delete, etc.).
+ *
+ * `invalidate: true` purges the CDN edge caches as well, so the deleted
+ * URL stops serving stale bytes within seconds rather than hours.
+ */
+export const safeDestroy = async (publicId) => {
+  if (!publicId || typeof publicId !== 'string') return;
+  try {
+    await cloudinary.uploader.destroy(publicId, { invalidate: true });
+  } catch (error) {
+    console.warn(`[cloudinary] failed to destroy ${publicId}:`, error?.message);
+  }
+};
+
 export { cloudinary };

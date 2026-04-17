@@ -9,6 +9,7 @@ import {
   searchMessages,
 } from '../utils/messageService.js';
 import { MESSAGE_TYPES } from '../utils/constants.js';
+import { safeDestroy } from '../config/cloudinary.js';
 
 /**
  * Strip server-only / per-user fields before sending a message to the
@@ -92,6 +93,13 @@ export const deleteMessageController = asyncHandler(async (req, res) => {
     return res
       .status(200)
       .json({ success: true, data: { id: req.params.id, scope: 'self' } });
+  }
+
+  // Permanent delete: orphaned Cloudinary assets become billable storage
+  // forever. Fire-and-forget so the response is not blocked by Cloudinary
+  // latency, and any failure is logged inside `safeDestroy` itself.
+  if (result.imagePublicId) {
+    safeDestroy(result.imagePublicId);
   }
 
   res.status(200).json({
