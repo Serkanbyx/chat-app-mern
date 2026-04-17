@@ -82,6 +82,15 @@ const messageSchema = new Schema(
       enum: Object.values(MESSAGE_DELETED_FOR),
       default: MESSAGE_DELETED_FOR.NONE,
     },
+    /**
+     * Per-user "delete for self" tombstones. Storing user ids here lets us
+     * filter the message out of the requester's history without destroying
+     * the row for the rest of the participants. Filtered at read time.
+     */
+    hiddenFor: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
     replyTo: {
       type: Schema.Types.ObjectId,
       ref: 'Message',

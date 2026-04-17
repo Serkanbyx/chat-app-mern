@@ -3,6 +3,7 @@ import { Message } from '../models/Message.js';
 import { Conversation } from '../models/Conversation.js';
 import { ApiError } from './apiError.js';
 import { assertParticipant, resetUnread } from './conversationService.js';
+import { escapeRegex } from './escapeRegex.js';
 import { env } from '../config/env.js';
 import {
   MESSAGE_TYPES,
@@ -10,6 +11,7 @@ import {
   MESSAGE_TEXT_MAX_LENGTH,
   MESSAGE_EDIT_WINDOW_MS,
   MESSAGE_DELETE_FOR_EVERYONE_WINDOW_MS,
+  REACTION_EMOJI_MAX_LENGTH,
   ROLES,
 } from './constants.js';
 
@@ -253,6 +255,267 @@ export const assertCanModifyMessage = (
     default:
       throw ApiError.badRequest('Unknown modify action');
   }
+};
+
+/**
+ * Cursor-based pagination for chat history. Cursor pagination outperforms
+ * offset for append-only streams: stable in the face of concurrent inserts
+ * and free of the deepening-skip cost as users scroll back through years
+ * of history.
+ *
+ * Returns messages strictly OLDER than `before` (or the most recent ones
+ * when no cursor is supplied). Caller-controlled `limit` is clamped at the
+ * route level to defuse single-request data exfiltration.
+ */
+export const listMessages = async ({
+  conversationId,
+  userId,
+  before = null,
+  limit = 30,
+}) => {
+  const cid = toIdString(conversationId);
+  const uid = toIdString(userId);
+
+  if (!cid || !isValidObjectId(cid)) {
+    throw ApiError.badRequest('Invalid conversation id');
+  }
+  if (!uid || !isValidObjectId(uid)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
+
+  const conversation = await Conversation.findById(cid).select('participants');
+  assertParticipant(conversation, uid);
+
+  const filter = {
+    conversationId: cid,
+    // Per-user "delete for self" tombstones — filtered out of the requester's
+    // view without destroying the row for the rest of the participants.
+    hiddenFor: { $ne: new Types.ObjectId(uid) },
+  };
+
+  if (before) {
+    const bid = toIdString(before);
+    if (!bid || !isValidObjectId(bid)) {
+      throw ApiError.badRequest('Invalid cursor');
+    }
+    filter._id = { $lt: new Types.ObjectId(bid) };
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 50);
+
+  // Fetch limit + 1 so we can compute hasMore without a second count query.
+  const docs = await Message.find(filter)
+    .sort({ _id: -1 })
+    .limit(safeLimit + 1)
+    .populate({ path: 'sender', select: SENDER_PROJECTION });
+
+  const hasMore = docs.length > safeLimit;
+  const sliced = hasMore ? docs.slice(0, safeLimit) : docs;
+  const nextCursor = hasMore ? sliced[sliced.length - 1]._id.toString() : null;
+
+  // Reverse so the array is in chronological (asc) order — easier for the
+  // client to render without per-row gymnastics.
+  const items = sliced.reverse();
+
+  return { items, hasMore, nextCursor };
+};
+
+/**
+ * Edit the text body of a message. Authorization rules live in
+ * `assertCanModifyMessage` — this function only orchestrates: load → check
+ * → mutate → repopulate.
+ */
+export const editMessage = async ({ messageId, actor, text }) => {
+  const mid = toIdString(messageId);
+  if (!mid || !isValidObjectId(mid)) {
+    throw ApiError.badRequest('Invalid message id');
+  }
+
+  const message = await Message.findById(mid);
+  if (!message) throw ApiError.notFound('Message not found');
+
+  // Participant gate first — non-participants can't even probe message ids.
+  const conversation = await Conversation.findById(message.conversationId).select(
+    'participants',
+  );
+  assertParticipant(conversation, actor?._id);
+
+  assertCanModifyMessage(message, actor, { action: 'edit' });
+
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+  if (trimmed.length === 0) {
+    throw ApiError.badRequest('Text message cannot be empty');
+  }
+  if (trimmed.length > MESSAGE_TEXT_MAX_LENGTH) {
+    throw ApiError.badRequest(
+      `Text message must be at most ${MESSAGE_TEXT_MAX_LENGTH} characters`,
+    );
+  }
+
+  message.text = trimmed;
+  message.editedAt = new Date();
+  await message.save();
+
+  return message.populate({ path: 'sender', select: SENDER_PROJECTION });
+};
+
+/**
+ * Delete a message either for the requester only ('self') or for every
+ * participant ('everyone'). Cloudinary cleanup is intentionally NOT done
+ * here — the upload controller (STEP 8) owns that concern; the service
+ * just exposes `imagePublicId` on the returned doc so the caller (or
+ * socket handler) can trigger a destroy.
+ */
+export const deleteMessage = async ({ messageId, actor, scope }) => {
+  if (scope !== 'self' && scope !== 'everyone') {
+    throw ApiError.badRequest("scope must be 'self' or 'everyone'");
+  }
+  const mid = toIdString(messageId);
+  if (!mid || !isValidObjectId(mid)) {
+    throw ApiError.badRequest('Invalid message id');
+  }
+
+  const message = await Message.findById(mid);
+  if (!message) throw ApiError.notFound('Message not found');
+
+  const conversation = await Conversation.findById(message.conversationId).select(
+    'participants',
+  );
+  assertParticipant(conversation, actor?._id);
+
+  if (scope === 'self') {
+    assertCanModifyMessage(message, actor, { action: 'deleteForSelf' });
+    const actorId = toIdString(actor._id);
+    const already = (message.hiddenFor || []).some(
+      (id) => toIdString(id) === actorId,
+    );
+    if (!already) {
+      message.hiddenFor.push(new Types.ObjectId(actorId));
+      await message.save();
+    }
+    return { scope: 'self', message };
+  }
+
+  assertCanModifyMessage(message, actor, { action: 'deleteForEveryone' });
+  const previousImagePublicId = message.imagePublicId || '';
+  message.deletedFor = MESSAGE_DELETED_FOR.EVERYONE;
+  // Pre-save hook clears text/imageUrl; clear the stored cloudinary id too
+  // so subsequent reads can't replay it.
+  message.imagePublicId = '';
+  await message.save();
+
+  return {
+    scope: 'everyone',
+    message: await message.populate({ path: 'sender', select: SENDER_PROJECTION }),
+    // Surface to the caller so it can fire-and-forget a Cloudinary destroy.
+    imagePublicId: previousImagePublicId,
+  };
+};
+
+/**
+ * Toggle / replace a single user's reaction on a message. Rules:
+ *  - Same emoji as existing → remove (toggle off).
+ *  - Different emoji → replace (one reaction per user per message).
+ *  - No previous reaction → add.
+ *
+ * Implemented atomically as one updateOne with array filters where
+ * possible, but since we need to branch on the existing entry we read
+ * → mutate → save with the model's pre-save dedupe acting as belt + braces.
+ */
+export const toggleReaction = async ({ messageId, actor, emoji }) => {
+  const mid = toIdString(messageId);
+  if (!mid || !isValidObjectId(mid)) {
+    throw ApiError.badRequest('Invalid message id');
+  }
+  const trimmed = typeof emoji === 'string' ? emoji.trim() : '';
+  if (trimmed.length === 0) {
+    throw ApiError.badRequest('emoji is required');
+  }
+  if ([...trimmed].length > REACTION_EMOJI_MAX_LENGTH) {
+    throw ApiError.badRequest(
+      `emoji must be at most ${REACTION_EMOJI_MAX_LENGTH} characters`,
+    );
+  }
+
+  const message = await Message.findById(mid);
+  if (!message) throw ApiError.notFound('Message not found');
+  if (message.deletedFor === MESSAGE_DELETED_FOR.EVERYONE) {
+    throw ApiError.badRequest('Cannot react to a deleted message');
+  }
+
+  const conversation = await Conversation.findById(message.conversationId).select(
+    'participants',
+  );
+  assertParticipant(conversation, actor?._id);
+
+  const actorId = toIdString(actor._id);
+  const existingIdx = message.reactions.findIndex(
+    (r) => toIdString(r.user) === actorId,
+  );
+
+  let action;
+  if (existingIdx === -1) {
+    message.reactions.push({ user: new Types.ObjectId(actorId), emoji: trimmed });
+    action = 'added';
+  } else if (message.reactions[existingIdx].emoji === trimmed) {
+    message.reactions.splice(existingIdx, 1);
+    action = 'removed';
+  } else {
+    message.reactions[existingIdx].emoji = trimmed;
+    action = 'replaced';
+  }
+
+  await message.save();
+  await message.populate({ path: 'sender', select: SENDER_PROJECTION });
+
+  return { action, message };
+};
+
+/**
+ * In-conversation full-text-ish search. We never pass raw user input to
+ * `$regex` — `escapeRegex` neutralizes metacharacters that could trigger
+ * catastrophic backtracking (ReDoS). `i` makes the search case-insensitive
+ * which is what users expect from chat search.
+ */
+export const searchMessages = async ({
+  conversationId,
+  userId,
+  q,
+  limit = 30,
+}) => {
+  const cid = toIdString(conversationId);
+  const uid = toIdString(userId);
+
+  if (!cid || !isValidObjectId(cid)) {
+    throw ApiError.badRequest('Invalid conversation id');
+  }
+  if (!uid || !isValidObjectId(uid)) {
+    throw ApiError.badRequest('Invalid user id');
+  }
+
+  const term = typeof q === 'string' ? q.trim() : '';
+  if (term.length < 2 || term.length > 100) {
+    throw ApiError.badRequest('Search term must be 2–100 characters');
+  }
+
+  const conversation = await Conversation.findById(cid).select('participants');
+  assertParticipant(conversation, uid);
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 50);
+  const safe = escapeRegex(term);
+
+  const items = await Message.find({
+    conversationId: cid,
+    type: MESSAGE_TYPES.TEXT,
+    text: { $regex: safe, $options: 'i' },
+    deletedFor: { $ne: MESSAGE_DELETED_FOR.EVERYONE },
+    hiddenFor: { $ne: new Types.ObjectId(uid) },
+  })
+    .sort({ createdAt: -1 })
+    .limit(safeLimit)
+    .populate({ path: 'sender', select: SENDER_PROJECTION });
+
+  return { items, total: items.length };
 };
 
 export const _internals = {

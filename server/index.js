@@ -12,6 +12,9 @@ import { globalLimiter } from './middlewares/rateLimiters.js';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import conversationRoutes from './routes/conversation.routes.js';
+import messageRoutes, {
+  conversationMessageRouter,
+} from './routes/message.routes.js';
 
 validateEnv();
 
@@ -57,9 +60,13 @@ app.get('/api/health', (_req, res) => {
 
 // 10) Feature routes.
 app.use('/api/auth', authRoutes); // STEP 3
+// Conversation-scoped message routes must be mounted BEFORE the
+// generic conversation router so `/conversations/:id/messages/...`
+// resolves to the message handlers.
+app.use('/api/conversations/:id/messages', conversationMessageRouter); // STEP 7
 app.use('/api/conversations', conversationRoutes); // STEP 6
+app.use('/api/messages', messageRoutes); // STEP 7
 //     app.use('/api/users', userRoutes);         // STEP 8
-//     app.use('/api/messages', messageRoutes);   // STEP 7
 //     app.use('/api/notifications', notifyRoutes);// STEP 16
 //     app.use('/api/upload', uploadRoutes);      // STEP 8
 //     app.use('/api/admin', adminRoutes);        // STEP 17
