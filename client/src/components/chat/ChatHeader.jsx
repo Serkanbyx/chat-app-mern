@@ -23,7 +23,7 @@ import { useSocket } from '../../contexts/SocketContext.jsx';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside.js';
 import * as conversationService from '../../api/conversation.service.js';
 import * as userService from '../../api/user.service.js';
-import { formatLastSeen } from '../../utils/helpers.js';
+import { formatLastSeen } from '../../utils/formatDate.js';
 
 /**
  * ChatHeader — top bar of the conversation panel.

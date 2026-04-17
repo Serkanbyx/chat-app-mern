@@ -26,7 +26,8 @@ import Spinner from '../common/Spinner.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
 import MessageStatusTicks from './MessageStatusTicks.jsx';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside.js';
-import { formatClockTime, linkifyText } from '../../utils/helpers.js';
+import { linkifyText } from '../../utils/helpers.js';
+import { formatClockTime } from '../../utils/formatDate.js';
 
 /**
  * MessageBubble — render a single message row inside the timeline.

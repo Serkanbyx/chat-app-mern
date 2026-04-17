@@ -18,11 +18,8 @@ import EmptyState from '../common/EmptyState.jsx';
 import Spinner from '../common/Spinner.jsx';
 import MessagesListSkeleton from '../common/skeletons/MessagesListSkeleton.jsx';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll.js';
-import {
-  formatDaySeparator,
-  groupConsecutiveBy,
-  isSameCalendarDay,
-} from '../../utils/helpers.js';
+import { groupConsecutiveBy } from '../../utils/helpers.js';
+import { formatDaySeparator, isSameCalendarDay } from '../../utils/formatDate.js';
 
 /**
  * MessagesList — middle scrollable region of the chat panel.
