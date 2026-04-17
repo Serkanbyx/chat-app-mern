@@ -7,6 +7,8 @@ import morgan from 'morgan';
 
 import { env, isProduction, validateEnv } from './config/env.js';
 import { connectDB } from './config/db.js';
+import { createSocketServer } from './config/socket.js';
+import { registerSocketHandlers } from './sockets/index.js';
 import { sanitizeRequest } from './middlewares/sanitize.middleware.js';
 import { globalLimiter } from './middlewares/rateLimiters.js';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
@@ -78,7 +80,18 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 const httpServer = http.createServer(app);
-// Socket.io will be attached to httpServer in STEP 13.
+
+// 12) Socket.io — attached to the same HTTP server so REST and
+//     WebSocket share one port (no extra firewall hole) and one CORS
+//     policy (single source of truth). Handshake auth + connection
+//     lifecycle are wired in `sockets/index.js`.
+const io = createSocketServer(httpServer, env);
+registerSocketHandlers(io);
+
+// Expose `io` to Express handlers (for emitting from REST routes, e.g.
+// admin force-disconnect). Reading via `req.app.get('io')` keeps this
+// dependency explicit and avoids creating a circular import.
+app.set('io', io);
 
 const start = async () => {
   await connectDB();
@@ -91,7 +104,11 @@ start();
 
 const shutdown = (signal) => {
   console.log(`[server] received ${signal}, shutting down...`);
-  httpServer.close(() => process.exit(0));
+  // Order matters: close Socket.io first so in-flight handshakes and
+  // long-poll requests stop before the HTTP server tears down.
+  io.close(() => {
+    httpServer.close(() => process.exit(0));
+  });
   setTimeout(() => process.exit(1), 10_000).unref();
 };
 process.on('SIGINT', () => shutdown('SIGINT'));
