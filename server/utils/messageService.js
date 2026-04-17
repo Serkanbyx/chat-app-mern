@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import { Message } from '../models/Message.js';
 import { Conversation } from '../models/Conversation.js';
+import { User } from '../models/User.js';
 import { ApiError } from './apiError.js';
 import { assertParticipant, resetUnread } from './conversationService.js';
 import { escapeRegex } from './escapeRegex.js';
 import { env } from '../config/env.js';
 import {
+  CONVERSATION_TYPES,
   MESSAGE_TYPES,
   MESSAGE_DELETED_FOR,
   MESSAGE_TEXT_MAX_LENGTH,
@@ -60,6 +62,59 @@ const isAllowedCloudinaryUrl = (url) => {
 };
 
 /**
+ * Resolve the bidirectional block state between the viewer and the OTHER
+ * participant of a direct conversation. Returns the earliest `blockedAt`
+ * across both directions — read-time enforcement uses it as the cutoff
+ * for hiding messages.
+ *
+ * Group chats are intentionally exempt: per spec, group context is shared
+ * and a block does not silence traffic inside an already-joined group.
+ */
+const getDirectBlockState = async ({ conversation, viewerId }) => {
+  if (!conversation || conversation.type !== CONVERSATION_TYPES.DIRECT) {
+    return { otherId: null, cutoffAt: null, viewerBlocked: false, theyBlocked: false };
+  }
+
+  const vid = toIdString(viewerId);
+  const otherRaw = (conversation.participants || []).find(
+    (p) => toIdString(p) !== vid,
+  );
+  const otherId = toIdString(otherRaw);
+  if (!otherId) {
+    return { otherId: null, cutoffAt: null, viewerBlocked: false, theyBlocked: false };
+  }
+
+  // Two parallel queries (`me` and `them`) — could be condensed into one
+  // `$in` query but readability wins over a single round-trip here.
+  const [me, them] = await Promise.all([
+    User.findById(vid).select('blockedUsers').lean(),
+    User.findById(otherId).select('blockedUsers').lean(),
+  ]);
+
+  const myBlock = (me?.blockedUsers || []).find(
+    (entry) => String(entry?.user) === otherId,
+  );
+  const theirBlock = (them?.blockedUsers || []).find(
+    (entry) => String(entry?.user) === vid,
+  );
+
+  // Earliest cutoff wins so the strictest side dictates visibility.
+  let cutoffAt = null;
+  if (myBlock?.blockedAt) cutoffAt = new Date(myBlock.blockedAt);
+  if (theirBlock?.blockedAt) {
+    const t = new Date(theirBlock.blockedAt);
+    if (!cutoffAt || t < cutoffAt) cutoffAt = t;
+  }
+
+  return {
+    otherId,
+    cutoffAt,
+    viewerBlocked: Boolean(myBlock),
+    theyBlocked: Boolean(theirBlock),
+  };
+};
+
+/**
  * Persist a new message after validating the caller's membership in the
  * conversation. Returns the saved message with `sender` populated using
  * the public projection so it's safe to send straight to clients.
@@ -99,6 +154,22 @@ export const createMessage = async ({
   if (!conversation) throw ApiError.notFound('Conversation not found');
   // Source-of-truth access control: must be a participant to write.
   assertParticipant(conversation, sid);
+
+  // Block enforcement on the WRITE path. We reject 403 in BOTH directions
+  // (I blocked them OR they blocked me) so the channel is symmetrically
+  // closed and impossible to bypass via the client.
+  if (conversation.type === CONVERSATION_TYPES.DIRECT) {
+    const { viewerBlocked, theyBlocked } = await getDirectBlockState({
+      conversation,
+      viewerId: sid,
+    });
+    if (viewerBlocked) {
+      throw ApiError.forbidden('You have blocked this user');
+    }
+    if (theyBlocked) {
+      throw ApiError.forbidden('You can no longer message this user');
+    }
+  }
 
   const payload = {
     conversationId: cid,
@@ -283,7 +354,9 @@ export const listMessages = async ({
     throw ApiError.badRequest('Invalid user id');
   }
 
-  const conversation = await Conversation.findById(cid).select('participants');
+  const conversation = await Conversation.findById(cid).select(
+    'participants type',
+  );
   assertParticipant(conversation, uid);
 
   const filter = {
@@ -292,6 +365,22 @@ export const listMessages = async ({
     // view without destroying the row for the rest of the participants.
     hiddenFor: { $ne: new Types.ObjectId(uid) },
   };
+
+  // Direct-conversation block filter: hide messages from the OTHER party
+  // that were created AFTER the block was placed. History before the
+  // cutoff stays intact (preserves context). Group chats are exempt.
+  if (conversation.type === CONVERSATION_TYPES.DIRECT) {
+    const { otherId, cutoffAt } = await getDirectBlockState({
+      conversation,
+      viewerId: uid,
+    });
+    if (otherId && cutoffAt) {
+      filter.$nor = (filter.$nor || []).concat({
+        sender: new Types.ObjectId(otherId),
+        createdAt: { $gt: cutoffAt },
+      });
+    }
+  }
 
   if (before) {
     const bid = toIdString(before);

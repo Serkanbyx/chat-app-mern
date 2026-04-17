@@ -21,6 +21,23 @@ const { Schema, model } = mongoose;
 // to avoid the catastrophic-backtracking patterns floating around the web.
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Per-block subdocument. Storing `blockedAt` lets read-time enforcement
+ * preserve history (messages exchanged BEFORE the block stay visible)
+ * while hiding any traffic created AFTER the block was placed.
+ */
+const blockedUserSchema = new Schema(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    blockedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const preferencesSchema = new Schema(
   {
     theme: { type: String, enum: THEME, default: 'system' },
@@ -96,7 +113,7 @@ const userSchema = new Schema(
     },
     lastSeenAt: { type: Date, default: Date.now },
     isOnline: { type: Boolean, default: false },
-    blockedUsers: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
+    blockedUsers: { type: [blockedUserSchema], default: [] },
     mutedConversations: [{ type: Schema.Types.ObjectId, ref: 'Conversation' }],
     archivedConversations: [{ type: Schema.Types.ObjectId, ref: 'Conversation' }],
     preferences: { type: preferencesSchema, default: () => ({}) },
@@ -131,6 +148,12 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
   delete obj.password;
   return obj;
 };
+
+// Read-side hot-path: "find every user who has me in their block list".
+// Used by `getConversations` to suppress chats where the other party
+// blocked the viewer. A direct index on the embedded user id keeps this
+// query selective even as the user base grows.
+userSchema.index({ 'blockedUsers.user': 1 });
 
 export const User = model('User', userSchema);
 export default User;

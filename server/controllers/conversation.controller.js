@@ -85,8 +85,13 @@ const populateAndSerialize = async (conv, viewerId) => {
  */
 const loadAndAssertUsable = async (targetIds, requester) => {
   const requesterId = String(requester._id);
+  // `blockedUsers` is now `[{ user, blockedAt }]` — extract just the ids
+  // for membership checks.
   const requesterBlocks = new Set(
-    (requester.blockedUsers || []).map((id) => String(id)),
+    (requester.blockedUsers || [])
+      .map((entry) => entry?.user)
+      .filter(Boolean)
+      .map((id) => String(id)),
   );
 
   const users = await User.find({ _id: { $in: targetIds } })
@@ -103,7 +108,9 @@ const loadAndAssertUsable = async (targetIds, requester) => {
     if (requesterBlocks.has(String(user._id))) {
       throw ApiError.forbidden('You have blocked one of the selected users');
     }
-    const theyBlock = (user.blockedUsers || []).map((b) => String(b));
+    const theyBlock = (user.blockedUsers || [])
+      .map((entry) => String(entry?.user))
+      .filter(Boolean);
     if (theyBlock.includes(requesterId)) {
       throw ApiError.forbidden('One of the selected users has blocked you');
     }
@@ -119,7 +126,37 @@ export const getConversations = asyncHandler(async (req, res) => {
     maxLimit: 50,
   });
 
+  // Build the bidirectional set of "users I can no longer see in the
+  // sidebar": users I blocked + users who blocked me. Direct chats with
+  // any of them are hidden from the LIST view (the conversation itself
+  // is preserved — re-opening via deep link is allowed and surfaces a
+  // banner client-side).
+  const blockedByMe = (req.user.blockedUsers || [])
+    .map((entry) => entry?.user)
+    .filter(Boolean);
+
+  const blockedMeRows = await User.find(
+    { 'blockedUsers.user': req.user._id },
+    { _id: 1 },
+  ).lean();
+  const blockedMeIds = blockedMeRows.map((u) => u._id);
+
+  // De-duplicate by hex string before re-materialising as ObjectIds for
+  // the query — concatenating the two arrays directly would let a mutual
+  // block double-count (and confuses index planners).
+  const hiddenUserIds = Array.from(
+    new Set([...blockedByMe, ...blockedMeIds].map((id) => String(id))),
+  ).map((s) => new Types.ObjectId(s));
+
   const filter = { participants: req.user._id, isActive: true };
+  if (hiddenUserIds.length > 0) {
+    filter.$nor = [
+      {
+        type: CONVERSATION_TYPES.DIRECT,
+        participants: { $in: hiddenUserIds },
+      },
+    ];
+  }
 
   const [items, total] = await Promise.all([
     Conversation.find(filter)
