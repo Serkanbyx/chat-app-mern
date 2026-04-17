@@ -71,3 +71,51 @@ export const NOTIFICATION_TEXT_MAX_LENGTH = 200;
 // this window, repeated messages from the same conversation overwrite
 // the existing unread notification instead of stacking new rows.
 export const NOTIFICATION_COLLAPSE_WINDOW_MS = 30 * 1000;
+
+/* -------------------- STEP 18 — Reports & moderation -------------------- */
+
+export const REPORT_TARGET_TYPES = Object.freeze({
+  USER: 'user',
+  MESSAGE: 'message',
+  CONVERSATION: 'conversation',
+});
+
+export const REPORT_REASONS = Object.freeze({
+  SPAM: 'spam',
+  HARASSMENT: 'harassment',
+  INAPPROPRIATE: 'inappropriate',
+  OTHER: 'other',
+});
+
+export const REPORT_STATUSES = Object.freeze({
+  PENDING: 'pending',
+  REVIEWED: 'reviewed',
+  DISMISSED: 'dismissed',
+  ACTION_TAKEN: 'actionTaken',
+});
+
+// Hard cap on free-text fields. Same length on both sides keeps the
+// document predictable and matches the moderator UI textarea limit.
+export const REPORT_DESCRIPTION_MAX_LENGTH = 500;
+export const REPORT_REVIEW_NOTE_MAX_LENGTH = 500;
+
+// Anti-weaponisation guard: the SAME reporter cannot file a fresh
+// report against the SAME target inside this window. Limits brigading
+// patterns where coordinated accounts spam a target's report queue.
+export const REPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Closed enum of admin-side actions tracked by `AdminAuditLog`. Adding
+ * a new admin operation requires touching this enum AND the writer in
+ * `adminAudit.js` — intentional friction so the audit trail can never
+ * silently drop a class of action.
+ */
+export const ADMIN_AUDIT_ACTIONS = Object.freeze({
+  USER_SUSPEND: 'user.suspend',
+  USER_REINSTATE: 'user.reinstate',
+  USER_ROLE_CHANGE: 'user.roleChange',
+  USER_DELETE: 'user.delete',
+  MESSAGE_FORCE_DELETE: 'message.forceDelete',
+  CONVERSATION_VIEW: 'conversation.view',
+  REPORT_REVIEW: 'report.review',
+});
