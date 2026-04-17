@@ -34,6 +34,21 @@ export const MESSAGE_TYPES = Object.freeze({
   SYSTEM: 'system',
 });
 
+export const MESSAGE_DELETED_FOR = Object.freeze({
+  NONE: 'none',
+  SELF: 'self',
+  EVERYONE: 'everyone',
+});
+
+// Storage cap + DoS protection. Long-form content belongs in attachments.
+export const MESSAGE_TEXT_MAX_LENGTH = 4000;
+// Single grapheme cluster + ZWJ sequence comfortably fits in 4 chars.
+export const REACTION_EMOJI_MAX_LENGTH = 4;
+// Edit window: 15 minutes from message creation.
+export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+// Delete-for-everyone window for the sender: 5 minutes from creation.
+export const MESSAGE_DELETE_FOR_EVERYONE_WINDOW_MS = 5 * 60 * 1000;
+
 export const GROUP_NAME_MAX_LENGTH = 50;
 export const GROUP_MIN_PARTICIPANTS = 2;
 export const GROUP_MAX_PARTICIPANTS = 100;
