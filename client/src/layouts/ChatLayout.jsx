@@ -3,7 +3,12 @@ import clsx from 'clsx';
 import { WifiOff } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar.jsx';
-import { ChatStateProvider } from '../contexts/ChatStateContext.jsx';
+import NewChatModal from '../components/chat/NewChatModal.jsx';
+import NewGroupModal from '../components/chat/NewGroupModal.jsx';
+import {
+  ChatStateProvider,
+  useChatState,
+} from '../contexts/ChatStateContext.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
 
 /**
@@ -38,6 +43,22 @@ import { useSocket } from '../contexts/SocketContext.jsx';
  * to `/settings` and back triggers a fresh fetch — that small cost
  * keeps the cache from going stale across long-lived sessions.
  */
+/**
+ * ChatComposers — mounts the "create conversation" modals once,
+ * driven by `ChatStateContext`. Kept as a separate component so it
+ * can use the context (which is only available below the provider)
+ * without forcing the surrounding layout into a second render pass.
+ */
+const ChatComposers = () => {
+  const { isNewChatOpen, isNewGroupOpen, closeComposer } = useChatState();
+  return (
+    <>
+      <NewChatModal open={isNewChatOpen} onClose={closeComposer} />
+      <NewGroupModal open={isNewGroupOpen} onClose={closeComposer} />
+    </>
+  );
+};
+
 const ChatLayout = () => {
   const inConversation = useMatch('/chat/:conversationId');
   const { isConnected } = useSocket();
@@ -77,6 +98,8 @@ const ChatLayout = () => {
             </div>
           </div>
         </div>
+
+        <ChatComposers />
       </div>
     </ChatStateProvider>
   );

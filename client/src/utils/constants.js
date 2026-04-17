@@ -92,6 +92,19 @@ export const AUTH_RULES = Object.freeze({
 });
 
 /* ------------------------------------------------------------------
+ * Conversation rules
+ *
+ * Mirror the server-side `server/utils/constants.js` so the UI can
+ * enforce the same caps before paying for a round-trip rejection.
+ * Keep both sides in sync when editing.
+ * ------------------------------------------------------------------ */
+export const GROUP_RULES = Object.freeze({
+  NAME_MAX_LENGTH: 50,
+  MAX_PARTICIPANTS: 100,
+  AVATAR_MAX_SIZE_MB: 5,
+});
+
+/* ------------------------------------------------------------------
  * Notification system
  * ------------------------------------------------------------------ */
 export const NOTIFICATION_SOUND_URL = '/notification-sound.mp3';

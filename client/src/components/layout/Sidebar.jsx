@@ -44,10 +44,11 @@ import PresenceDot from '../chat/PresenceDot.jsx';
  *     do NOT fuzzy-search conversations client-side — that scales
  *     poorly and surfaces stale data; a missing chat is one tap away
  *     via the user search instead.
- *   - The "+ New" menu currently exposes placeholder triggers because
- *     `NewChatModal` / `NewGroupModal` arrive in Step 26. The button
- *     and dropdown are kept in place so muscle memory and tab order
- *     stay consistent through the next iteration.
+ *   - The "+ New" menu opens the shared composer modals
+ *     (`NewChatModal` / `NewGroupModal`) by toggling flags on
+ *     `ChatStateContext`. The modals themselves live one level up in
+ *     `ChatLayout` so the empty-state CTA can trigger the same flow
+ *     without duplicating mounts.
  *   - Live socket listeners are scoped to this component because they
  *     only matter while the user is looking at `/chat/*`. `ChatLayout`
  *     unmounts the whole tree (and tears down the listeners with it)
@@ -89,6 +90,8 @@ const Sidebar = () => {
     removeConversation,
     incrementUnread,
     resetUnread,
+    openNewChat,
+    openNewGroup,
   } = useChatState();
 
   const activeMatch = useMatch('/chat/:conversationId');
@@ -502,9 +505,11 @@ const Sidebar = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  disabled
-                  title="Available in Step 26"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    openNewChat();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
                   <span>New chat</span>
@@ -512,9 +517,11 @@ const Sidebar = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  disabled
-                  title="Available in Step 26"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    openNewGroup();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   <Users className="h-4 w-4" aria-hidden="true" />
                   <span>New group</span>

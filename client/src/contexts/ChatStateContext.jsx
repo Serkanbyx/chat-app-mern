@@ -63,6 +63,18 @@ export const ChatStateProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(null);
 
+  /**
+   * Composer modal state.
+   *
+   * `NewChatModal` and `NewGroupModal` are mounted *once* at the layout
+   * level and toggled via the context. Two surfaces trigger them today
+   * (`Sidebar`'s "+ New" dropdown and `EmptyChatPage`'s CTA), and Step
+   * 30+ will wire group settings panels into the same primitives.
+   * Centralising the open/close flags here means each trigger stays a
+   * one-liner and the modals can never be double-mounted.
+   */
+  const [activeComposer, setActiveComposer] = useState(null);
+
   const bootstrappedRef = useRef(false);
 
   const fetchConversations = useCallback(async () => {
@@ -84,6 +96,7 @@ export const ChatStateProvider = ({ children }) => {
       bootstrappedRef.current = false;
       setConversations([]);
       setActiveConversationId(null);
+      setActiveComposer(null);
       setError(null);
       setIsLoading(false);
       return;
@@ -92,6 +105,10 @@ export const ChatStateProvider = ({ children }) => {
     bootstrappedRef.current = true;
     fetchConversations();
   }, [isAuthenticated, fetchConversations]);
+
+  const openNewChat = useCallback(() => setActiveComposer('chat'), []);
+  const openNewGroup = useCallback(() => setActiveComposer('group'), []);
+  const closeComposer = useCallback(() => setActiveComposer(null), []);
 
   /**
    * Insert OR update a conversation in place, keeping the list sorted
@@ -157,6 +174,12 @@ export const ChatStateProvider = ({ children }) => {
       incrementUnread,
       resetUnread,
       refreshConversations: fetchConversations,
+      activeComposer,
+      isNewChatOpen: activeComposer === 'chat',
+      isNewGroupOpen: activeComposer === 'group',
+      openNewChat,
+      openNewGroup,
+      closeComposer,
     }),
     [
       conversations,
@@ -168,6 +191,10 @@ export const ChatStateProvider = ({ children }) => {
       incrementUnread,
       resetUnread,
       fetchConversations,
+      activeComposer,
+      openNewChat,
+      openNewGroup,
+      closeComposer,
     ],
   );
 
