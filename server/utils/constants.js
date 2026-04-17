@@ -22,3 +22,19 @@ export const DISPLAY_NAME_MAX_LENGTH = 40;
 export const BIO_MAX_LENGTH = 200;
 
 export const DELETED_USER_LABEL = 'Deleted User';
+
+export const CONVERSATION_TYPES = Object.freeze({
+  DIRECT: 'direct',
+  GROUP: 'group',
+});
+
+export const MESSAGE_TYPES = Object.freeze({
+  TEXT: 'text',
+  IMAGE: 'image',
+  SYSTEM: 'system',
+});
+
+export const GROUP_NAME_MAX_LENGTH = 50;
+export const GROUP_MIN_PARTICIPANTS = 2;
+export const GROUP_MAX_PARTICIPANTS = 100;
+export const DIRECT_PARTICIPANTS = 2;
