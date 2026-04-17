@@ -12,6 +12,8 @@ import {
   toggleMute,
   toggleArchive,
   deleteConversation,
+  markRead,
+  getUnreadSummary,
 } from '../controllers/conversation.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import {
@@ -31,6 +33,11 @@ const router = Router();
 router.use(protect);
 
 router.get('/', validatePagination, validateArchivedQuery, getConversations);
+
+// Literal segments MUST be declared before the `/:id` family — otherwise
+// `validateObjectId('id')` would short-circuit "unread-summary" with a 400
+// before this handler ever runs.
+router.get('/unread-summary', getUnreadSummary);
 
 router.post('/direct', validateCreateDirect, createDirect);
 router.post('/group', validateCreateGroup, createGroup);
@@ -72,5 +79,7 @@ router.delete(
 
 router.post('/:id/mute', validateObjectId('id'), toggleMute);
 router.post('/:id/archive', validateObjectId('id'), toggleArchive);
+
+router.post('/:id/read', validateObjectId('id'), markRead);
 
 export default router;

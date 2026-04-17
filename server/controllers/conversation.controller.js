@@ -11,6 +11,7 @@ import {
 import {
   createSystemMessage,
   buildSystemMessageText,
+  markConversationAsRead,
 } from '../utils/messageService.js';
 import { parsePagination, buildPageMeta } from '../utils/pagination.js';
 import {
@@ -627,6 +628,90 @@ export const toggleArchive = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({ success: true, data: { archived } });
+});
+
+// POST /api/conversations/:id/read
+export const markRead = asyncHandler(async (req, res) => {
+  // Load once for the participant gate AND to know who else needs the
+  // socket event later. `markConversationAsRead` does its own membership
+  // check too — but we want the snappy 4xx (and to capture participants
+  // for the broadcast payload) before touching the message collection.
+  const conversation = await Conversation.findById(req.params.id).select(
+    'participants type',
+  );
+  assertParticipant(conversation, req.user._id);
+
+  const result = await markConversationAsRead({
+    conversationId: req.params.id,
+    userId: req.user._id,
+  });
+
+  // Server-side privacy gate: a user with `showReadReceipts: false` may
+  // freely reset their OWN unread count, but the rest of the room must
+  // never learn that they read the messages. Decided here, not on the
+  // client, so flipping the toggle in DevTools is meaningless.
+  const broadcast = req.user.preferences?.showReadReceipts !== false;
+  const readAt = new Date().toISOString();
+
+  // STEP 15 wires the actual socket emission. The handler will read
+  // `broadcast` from this controller's response shape (or recompute it
+  // from the user doc) and only emit `conversationRead` when true:
+  //   io.to(`conversation:${conversationId}`)
+  //     .except(socketIdsFor(req.user._id))
+  //     .emit('conversationRead', { conversationId, userId, readAt });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      conversationId: String(conversation._id),
+      readAt,
+      messagesUpdated: result.modified,
+      broadcast,
+    },
+  });
+});
+
+// GET /api/conversations/unread-summary
+export const getUnreadSummary = asyncHandler(async (req, res) => {
+  // Map<userId, count> is stored as a sub-document in MongoDB, so the
+  // dotted path resolves correctly inside aggregation. The user id is a
+  // 24-char hex string sourced from the verified JWT — no metacharacters
+  // can leak into the field path here.
+  const userIdStr = String(req.user._id);
+  const unreadPath = `$unreadCounts.${userIdStr}`;
+
+  const rows = await Conversation.aggregate([
+    { $match: { participants: req.user._id, isActive: true } },
+    {
+      $project: {
+        _id: 1,
+        // `$ifNull` covers brand-new conversations where the map entry
+        // does not exist yet; `$convert` defends against accidental
+        // string values written by older code paths.
+        count: {
+          $convert: {
+            input: { $ifNull: [unreadPath, 0] },
+            to: 'int',
+            onError: 0,
+            onNull: 0,
+          },
+        },
+      },
+    },
+    { $match: { count: { $gt: 0 } } },
+    { $sort: { count: -1, _id: -1 } },
+  ]);
+
+  const perConversation = rows.map((row) => ({
+    conversationId: String(row._id),
+    count: row.count,
+  }));
+  const total = perConversation.reduce((sum, row) => sum + row.count, 0);
+
+  res.status(200).json({
+    success: true,
+    data: { total, perConversation },
+  });
 });
 
 // DELETE /api/conversations/:id
