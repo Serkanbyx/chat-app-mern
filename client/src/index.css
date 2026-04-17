@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+ * Design tokens — exposed as CSS custom properties via Tailwind v4's
+ * @theme. Anything declared here becomes a real `--color-*` variable
+ * AND a Tailwind utility (e.g. `bg-brand-500`, `text-brand-700`).
+ * ------------------------------------------------------------------ */
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+}
+
+/* Tailwind v4 dark mode is opt-in. We register a custom variant so any
+ * `dark:` utility activates when an ancestor (typically <html>) carries
+ * the `.dark` class. The :where() wrapper keeps the selector at zero
+ * specificity so user overrides still win. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  @apply antialiased text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-950;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* ------------------------------------------------------------------
+ * Accessibility / Preference toggles
+ *
+ * The Settings page persists three independent UI preferences:
+ *   - font size  (sm | md | lg)
+ *   - density    (compact | comfortable)
+ *   - animations (on | off)
+ *
+ * They are applied as classes on <html> by the SettingsContext, which
+ * keeps the tree free of inline styles and makes SSR-safe defaults
+ * trivial. The class hooks live here so any descendant inherits.
+ * ------------------------------------------------------------------ */
+.fs-sm { font-size: 14px; }
+.fs-md { font-size: 16px; }
+.fs-lg { font-size: 18px; }
+
+.density-compact .density-row { @apply py-1.5; }
+.density-comfortable .density-row { @apply py-3; }
+
+/* `prefers-reduced-motion` is the OS-level signal; `.no-anim` is the
+ * user-level override. Either one disables transitions/animations
+ * application-wide without component changes. */
+.no-anim *,
+.no-anim *::before,
+.no-anim *::after {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Slim, theme-aware scrollbars used by message lists & sidebars. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: theme(--color-gray-400) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: theme(--color-gray-400);
+  border-radius: 9999px;
+}
+.dark .scrollbar-thin {
+  scrollbar-color: theme(--color-gray-600) transparent;
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: theme(--color-gray-600);
+}
+
+/* Visible keyboard focus ring kept consistent across interactive
+ * elements regardless of theme. We intentionally avoid `outline: none`
+ * unless replaced by a ring — never silently strip focus. */
+:focus-visible {
+  @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-950;
+}
