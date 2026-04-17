@@ -57,9 +57,9 @@ const idOf = (value) => (value && value._id ? String(value._id) : String(value ?
 const ChatPage = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { preferences } = usePreferences();
-  const { socket, emit, typingByConversation } = useSocket();
+  const { socket, isConnected, emit, typingByConversation } = useSocket();
   const { setActiveConversationId: setNotificationActive } = useNotifications();
   const {
     setActiveConversationId,
@@ -356,6 +356,233 @@ const ChatPage = () => {
 
   const handleCancelReply = useCallback(() => setReplyTo(null), []);
 
+  /* ---------- Bubble action wiring (Step 29) ----------
+   * These callbacks are passed down to MessagesList → MessageBubble.
+   * They share the same socket-first / REST-fallback pattern as the
+   * composer so a brief disconnect never blocks the interaction.
+   *
+   * Local-state updates are deliberately conservative: we mutate only
+   * what the server response confirms, and let the broadcast echoes
+   * (`message:edited`, `message:deleted`, `message:reactionUpdated`)
+   * keep cross-tab state in sync.
+   */
+
+  /** Promisified socket emit with an ack timeout. */
+  const emitWithAck = useCallback(
+    (event, payload, { timeoutMs = 6000 } = {}) =>
+      new Promise((resolve, reject) => {
+        if (!socket || !isConnected) {
+          reject(new Error('disconnected'));
+          return;
+        }
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error('timeout'));
+        }, timeoutMs);
+        socket.emit(event, payload, (ack) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (ack && ack.success) {
+            resolve(ack);
+          } else {
+            reject(new Error(ack?.message || 'Operation failed'));
+          }
+        });
+      }),
+    [isConnected, socket],
+  );
+
+  const handleReplyToMessage = useCallback((message) => {
+    if (!message || !message._id) return;
+    setReplyTo(message);
+  }, []);
+
+  const handleEditMessage = useCallback(
+    async (message, nextText) => {
+      if (!message?._id) return;
+      try {
+        let updated = null;
+        try {
+          const ack = await emitWithAck('message:edit', {
+            messageId: String(message._id),
+            text: nextText,
+          });
+          updated = ack.message;
+        } catch (socketErr) {
+          const reason = socketErr?.message || '';
+          if (reason !== 'disconnected' && reason !== 'timeout') {
+            throw socketErr;
+          }
+          const result = await messageService.editMessage(
+            String(message._id),
+            nextText,
+          );
+          updated = result?.data ?? null;
+        }
+        if (updated) {
+          setMessages((prev) =>
+            prev.map((m) => (m._id === updated._id ? { ...m, ...updated } : m)),
+          );
+        }
+      } catch (err) {
+        toast.error(err?.message || 'Could not edit message');
+        throw err;
+      }
+    },
+    [emitWithAck],
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (message, scope) => {
+      if (!message?._id) return;
+      try {
+        try {
+          await emitWithAck('message:delete', {
+            messageId: String(message._id),
+            for: scope,
+          });
+        } catch (socketErr) {
+          const reason = socketErr?.message || '';
+          if (reason !== 'disconnected' && reason !== 'timeout') {
+            throw socketErr;
+          }
+          await messageService.deleteMessage(String(message._id), { scope });
+        }
+
+        // Apply the local mutation immediately. The server's broadcast
+        // excludes the originating socket, so this is the only source
+        // of truth on the originating tab.
+        if (scope === 'self') {
+          setMessages((prev) => prev.filter((m) => m._id !== message._id));
+        } else {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m._id === message._id
+                ? { ...m, deletedFor: 'everyone', text: '', imageUrl: '' }
+                : m,
+            ),
+          );
+        }
+      } catch (err) {
+        toast.error(err?.message || 'Could not delete message');
+        throw err;
+      }
+    },
+    [emitWithAck],
+  );
+
+  const handleToggleReaction = useCallback(
+    async (message, emoji) => {
+      if (!message?._id || !emoji) return;
+      try {
+        let nextReactions = null;
+        try {
+          const ack = await emitWithAck('message:reaction', {
+            messageId: String(message._id),
+            emoji,
+          });
+          nextReactions = ack.reactions;
+        } catch (socketErr) {
+          const reason = socketErr?.message || '';
+          if (reason !== 'disconnected' && reason !== 'timeout') {
+            throw socketErr;
+          }
+          const result = await messageService.toggleReaction(
+            String(message._id),
+            emoji,
+          );
+          nextReactions = result?.data?.reactions ?? null;
+        }
+        if (Array.isArray(nextReactions)) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m._id === message._id ? { ...m, reactions: nextReactions } : m,
+            ),
+          );
+        }
+      } catch (err) {
+        toast.error(err?.message || 'Could not react to message');
+        throw err;
+      }
+    },
+    [emitWithAck],
+  );
+
+  /**
+   * Retry a previously-failed optimistic send. Reuses the original
+   * `clientTempId` so cross-tab dedupe still works once the server
+   * accepts the message.
+   */
+  const handleRetryMessage = useCallback(
+    async (message) => {
+      const clientTempId = message?.clientTempId;
+      if (!clientTempId || !message?._failed) return;
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.clientTempId === clientTempId
+            ? { ...m, _pending: true, _failed: false }
+            : m,
+        ),
+      );
+
+      const payload = {
+        conversationId,
+        type: message.type || 'text',
+        text: message.text || '',
+        imageUrl: message.imageUrl || '',
+        imagePublicId: message.imagePublicId || '',
+        replyTo: message.replyTo?._id ? String(message.replyTo._id) : null,
+        clientTempId,
+      };
+
+      try {
+        let serverMessage = null;
+        try {
+          const ack = await emitWithAck('message:send', payload, {
+            timeoutMs: 8000,
+          });
+          serverMessage = ack.message;
+        } catch (socketErr) {
+          const reason = socketErr?.message || '';
+          if (reason !== 'disconnected' && reason !== 'timeout') {
+            throw socketErr;
+          }
+          const result = await messageService.sendMessage(conversationId, payload);
+          serverMessage = result?.data ?? result;
+        }
+        if (serverMessage) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.clientTempId === clientTempId
+                ? {
+                    ...serverMessage,
+                    clientTempId,
+                    _pending: false,
+                    _failed: false,
+                  }
+                : m,
+            ),
+          );
+        }
+      } catch (err) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientTempId === clientTempId
+              ? { ...m, _pending: false, _failed: true }
+              : m,
+          ),
+        );
+        toast.error(err?.message || 'Failed to resend message');
+        throw err;
+      }
+    },
+    [conversationId, emitWithAck],
+  );
+
   /* ---------- Composer disabled-state derivation ----------
    * Mirrors the server's write-side guards so the textarea reflects
    * reality before the user types into it. The server is still the
@@ -448,12 +675,19 @@ const ChatPage = () => {
         messages={messages}
         currentUserId={currentUserId}
         isGroup={conversation?.type === 'group'}
+        isAdmin={isAdmin}
+        participants={conversation?.participants ?? []}
         isLoadingInitial={isLoadingInitial}
         isLoadingOlder={isLoadingOlder}
         hasMore={hasMore}
         onLoadOlder={handleLoadOlder}
         typingUsers={typingUsers}
         showReadReceipts={preferences?.showReadReceipts !== false}
+        onReply={handleReplyToMessage}
+        onEdit={handleEditMessage}
+        onDelete={handleDeleteMessage}
+        onReact={handleToggleReaction}
+        onRetry={handleRetryMessage}
       />
 
       <MessageComposer

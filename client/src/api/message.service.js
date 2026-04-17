@@ -32,13 +32,19 @@ export const editMessage = async (messageId, text) => {
 };
 
 /**
- * Soft-delete by default. Pass `{ hard: true }` only from admin UI;
- * the regular endpoint enforces a sender + time-window check, while
- * `forceDeleteMessage` (admin.service) bypasses both.
+ * Soft-delete by default. The `scope` parameter ('self' | 'everyone')
+ * mirrors the socket `message:delete` event; the server reads it from
+ * the request body and applies the same authorisation rules
+ * (sender + 5-min window OR admin for 'everyone'). `hard` is reserved
+ * for admin UI which calls `forceDeleteMessage` in `admin.service`.
  */
-export const deleteMessage = async (messageId, { hard = false } = {}) => {
+export const deleteMessage = async (
+  messageId,
+  { scope = 'self', hard = false } = {},
+) => {
   const { data } = await api.delete(`/messages/${messageId}`, {
     params: hard ? { hard: 'true' } : undefined,
+    data: { for: scope },
   });
   return data;
 };

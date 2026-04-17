@@ -47,28 +47,71 @@ import {
  *   - The TypingIndicator is rendered AFTER all bubbles so it always
  *     sits at the very bottom of the visible feed.
  *
+ * Read-receipt computation (own messages only):
+ *   - In a 1:1 chat the recipient set has one entry, so the tick is
+ *     binary: 1 tick when unread, 2 ticks once they read.
+ *   - In a group, we count how many recipients (everyone except the
+ *     sender) appear in `readBy`. Three buckets:
+ *       0          → 'sent'    (single tick)
+ *       0 < x < N  → 'partial' (single tick + tooltip "Read by x/N")
+ *       x === N    → 'read'    (double tick)
+ *
  * Privacy:
- *   - "read" tick is downgraded to "sent" whenever the viewer disabled
- *     their own `showReadReceipts` preference. The server suppresses
- *     the `conversation:readBy` broadcast in that case too — this
- *     check is defence-in-depth against any cached state.
+ *   - "read" / "partial" ticks are downgraded to "sent" whenever the
+ *     viewer disabled their own `showReadReceipts` preference. The
+ *     server suppresses the `conversation:readBy` broadcast in that
+ *     case too — this check is defence-in-depth against any cached
+ *     state.
+ *   - Tooltip strings expose ONLY counts (e.g. "Read by 2/4"); the
+ *     identity of who read or didn't is never surfaced. Listing
+ *     readers in a group would broadcast individual reading habits.
  */
 
 const STICK_THRESHOLD = 100;
 
 const idOf = (value) => (value && value._id ? String(value._id) : String(value ?? ''));
 
-const computeTickStatus = (message, currentUserId, prefShowReceipts) => {
-  if (message?._pending) return 'pending';
+/**
+ * Compute the `tickStatus` + `tickTooltip` for a message owned by the
+ * viewer. Returns `{ status, tooltip }` so the bubble can pass them to
+ * `MessageStatusTicks` directly. Caller is expected to skip this for
+ * non-own messages — we still guard internally for safety.
+ */
+const computeReadSummary = (
+  message,
+  currentUserId,
+  prefShowReceipts,
+  recipientIdSet,
+) => {
+  if (message?._failed) return { status: 'failed', tooltip: '' };
+  if (message?._pending) return { status: 'pending', tooltip: '' };
+
   const meId = String(currentUserId || '');
   const senderId = idOf(message?.sender);
-  if (!meId || senderId !== meId) return 'sent';
-  if (!prefShowReceipts) return 'sent';
+  if (!meId || senderId !== meId) return { status: 'sent', tooltip: '' };
+  if (!prefShowReceipts) return { status: 'sent', tooltip: '' };
+
+  const totalRecipients = recipientIdSet?.size ?? 0;
+  if (totalRecipients === 0) return { status: 'sent', tooltip: '' };
+
   const readers = Array.isArray(message?.readBy) ? message.readBy : [];
-  const someoneElseRead = readers.some(
-    (entry) => entry && idOf(entry.user) !== meId,
-  );
-  return someoneElseRead ? 'read' : 'sent';
+  let readCount = 0;
+  const seen = new Set();
+  for (const entry of readers) {
+    const userId = idOf(entry?.user);
+    if (!userId || userId === meId || seen.has(userId)) continue;
+    if (recipientIdSet.has(userId)) {
+      seen.add(userId);
+      readCount += 1;
+    }
+  }
+
+  if (readCount === 0) return { status: 'sent', tooltip: '' };
+  if (readCount >= totalRecipients) return { status: 'read', tooltip: '' };
+  return {
+    status: 'partial',
+    tooltip: `Read by ${readCount}/${totalRecipients}`,
+  };
 };
 
 const MessagesList = forwardRef(
@@ -77,12 +120,19 @@ const MessagesList = forwardRef(
       messages = [],
       currentUserId,
       isGroup = false,
+      isAdmin = false,
+      participants = [],
       isLoadingInitial = false,
       isLoadingOlder = false,
       hasMore = false,
       onLoadOlder,
       typingUsers = [],
       showReadReceipts = true,
+      onReply,
+      onEdit,
+      onDelete,
+      onReact,
+      onRetry,
     },
     ref,
   ) => {
@@ -209,6 +259,20 @@ const MessagesList = forwardRef(
     /* ---------- Derived view ---------- */
     const grouped = useMemo(() => groupConsecutiveBy(messages), [messages]);
 
+    /* Memoize the recipient id Set so a 200-message timeline doesn't
+     * rebuild it on every render. The Set is read-only — every consumer
+     * that mutates would clone first. */
+    const recipientIdSet = useMemo(() => {
+      const meId = String(currentUserId || '');
+      const set = new Set();
+      for (const participant of participants ?? []) {
+        const id = idOf(participant);
+        if (!id || id === meId) continue;
+        set.add(id);
+      }
+      return set;
+    }, [participants, currentUserId]);
+
     const handlePillClick = useCallback(() => {
       const el = containerRef.current;
       if (!el) return;
@@ -252,9 +316,14 @@ const MessagesList = forwardRef(
 
               const isOwn =
                 currentUserId && idOf(message.sender) === String(currentUserId);
-              const tickStatus = isOwn
-                ? computeTickStatus(message, currentUserId, showReadReceipts)
-                : 'sent';
+              const { status: tickStatus, tooltip: tickTooltip } = isOwn
+                ? computeReadSummary(
+                    message,
+                    currentUserId,
+                    showReadReceipts,
+                    recipientIdSet,
+                  )
+                : { status: 'sent', tooltip: '' };
 
               return (
                 <Fragment key={message._id || message.clientTempId || index}>
@@ -278,9 +347,17 @@ const MessagesList = forwardRef(
                       message={message}
                       isOwn={isOwn}
                       isGroup={isGroup}
+                      isAdmin={isAdmin}
+                      currentUserId={currentUserId}
                       showAvatar={!isOwn && isGroupEnd}
                       showName={!isOwn && isGroupStart}
                       tickStatus={tickStatus}
+                      tickTooltip={tickTooltip}
+                      onReply={onReply}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      onReact={onReact}
+                      onRetry={onRetry}
                     />
                   </li>
                 </Fragment>
