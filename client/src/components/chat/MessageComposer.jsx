@@ -13,6 +13,7 @@ import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from 'emoji-picker-react
 import { ImagePlus, Send, Smile, X } from 'lucide-react';
 
 import Spinner from '../common/Spinner.jsx';
+import Tooltip from '../common/Tooltip.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { usePreferences } from '../../contexts/PreferencesContext.jsx';
 import { useSocket } from '../../contexts/SocketContext.jsx';
@@ -564,6 +565,15 @@ const MessageComposer = ({
   const remaining = MAX_TEXT_LENGTH - trimmedText.length;
   const showCounter = trimmedText.length > MAX_TEXT_LENGTH * 0.8;
 
+  /* When the live socket is down we still allow the click — the submit
+   * pipeline gracefully drops down to the REST fallback. The button just
+   * looks muted and the tooltip explains what's happening so the user
+   * understands why their message might queue / fail. */
+  const sendTooltipLabel = !isConnected
+    ? 'Offline — will try to send over HTTP'
+    : '';
+  const sendVisuallyMuted = canSend && !isConnected;
+
   return (
     <div className="relative border-t border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
       {/* Reply-to banner */}
@@ -707,24 +717,31 @@ const MessageComposer = ({
           </button>
         </div>
 
-        <button
-          type="submit"
-          disabled={!canSend}
-          className={clsx(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
-            canSend
-              ? 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:scale-95 dark:bg-brand-500 dark:hover:bg-brand-400'
-              : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-600',
-          )}
-          aria-label="Send message"
-          title="Send message"
-        >
-          {isSending || isUploading ? (
-            <Spinner size="sm" className="border-white/40 border-t-white" />
-          ) : (
-            <Send className="h-4 w-4" aria-hidden="true" />
-          )}
-        </button>
+        <Tooltip label={sendTooltipLabel} position="top">
+          <button
+            type="submit"
+            disabled={!canSend}
+            aria-disabled={!canSend || sendVisuallyMuted}
+            className={clsx(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
+              !canSend
+                ? 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-600'
+                : sendVisuallyMuted
+                ? 'bg-amber-500/80 text-white shadow-sm hover:bg-amber-500 active:scale-95 dark:bg-amber-600/80 dark:hover:bg-amber-600'
+                : 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:scale-95 dark:bg-brand-500 dark:hover:bg-brand-400',
+            )}
+            aria-label={
+              sendVisuallyMuted ? 'Send message (offline)' : 'Send message'
+            }
+            title={sendVisuallyMuted ? 'Offline — will try to send over HTTP' : 'Send message'}
+          >
+            {isSending || isUploading ? (
+              <Spinner size="sm" className="border-white/40 border-t-white" />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        </Tooltip>
       </form>
 
       {/* Footer hints — only render when relevant to keep the row tight. */}

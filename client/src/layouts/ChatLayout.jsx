@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Outlet, useMatch } from 'react-router-dom';
 import clsx from 'clsx';
-import { WifiOff } from 'lucide-react';
+import { AlertTriangle, WifiOff } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar.jsx';
 import NewChatModal from '../components/chat/NewChatModal.jsx';
@@ -11,6 +12,15 @@ import {
   useChatState,
 } from '../contexts/ChatStateContext.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
+
+/**
+ * Number of milliseconds we wait before escalating the "Reconnecting…"
+ * yellow strip into the red "Disconnected" banner. 30 s is long enough
+ * to cover a typical Wi-Fi handover or laptop wake-from-sleep without
+ * alarming the user, but short enough that a real outage surfaces
+ * before the user wonders why their messages aren't sending.
+ */
+const LONG_DISCONNECT_MS = 30_000;
 
 /**
  * ChatLayout — the only layout that goes full-bleed (no `Navbar`).
@@ -60,23 +70,78 @@ const ChatComposers = () => {
   );
 };
 
+/**
+ * ConnectionStrip — the small bar that surfaces the live socket
+ * health.
+ *
+ * Two-stage UX:
+ *   1. As soon as the socket reports `disconnected`, render the yellow
+ *      "Reconnecting…" stripe so the user understands why a freshly
+ *      sent message might be queued.
+ *   2. After `LONG_DISCONNECT_MS` of continuous downtime, escalate to
+ *      the red "Disconnected" banner — REST-fallback sends will still
+ *      attempt, but the user is warned that delivery is best-effort.
+ *
+ * Why we use a separate timer instead of a derived `Date.now() - since`:
+ *   The strip needs to *appear* exactly once we've crossed the
+ *   threshold, not every render frame. A one-shot `setTimeout` keeps
+ *   the layout free of `requestAnimationFrame` ticking and avoids
+ *   re-renders the rest of the chat surface would pay for.
+ *
+ * SECURITY:
+ *   The user-facing copy is intentionally generic. Server / socket
+ *   errors are NEVER echoed verbatim — those messages can leak
+ *   topology (`ENOTFOUND <host>`, JWT decode hints, etc.).
+ */
+const ConnectionStrip = () => {
+  const { isConnected } = useSocket();
+  const [longDisconnect, setLongDisconnect] = useState(false);
+
+  useEffect(() => {
+    if (isConnected) {
+      setLongDisconnect(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setLongDisconnect(true);
+    }, LONG_DISCONNECT_MS);
+    return () => window.clearTimeout(timer);
+  }, [isConnected]);
+
+  if (isConnected) return null;
+
+  if (longDisconnect) {
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex shrink-0 items-center justify-center gap-2 bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm dark:bg-red-700"
+      >
+        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>Disconnected — your messages may not send.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex shrink-0 items-center justify-center gap-2 bg-amber-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm dark:bg-amber-600"
+    >
+      <WifiOff className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
+      <span>Reconnecting…</span>
+    </div>
+  );
+};
+
 const ChatLayout = () => {
   const inConversation = useMatch('/chat/:conversationId');
-  const { isConnected } = useSocket();
 
   return (
     <ChatStateProvider>
       <div className="flex h-dvh w-full flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
-        {!isConnected ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex shrink-0 items-center justify-center gap-2 bg-amber-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm dark:bg-amber-600"
-          >
-            <WifiOff className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
-            <span>Reconnecting…</span>
-          </div>
-        ) : null}
+        <ConnectionStrip />
 
         <NotificationPermissionBanner />
 
