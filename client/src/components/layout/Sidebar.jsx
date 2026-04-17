@@ -26,7 +26,8 @@ import * as conversationService from '../../api/conversation.service.js';
 import * as userService from '../../api/user.service.js';
 import Avatar from '../common/Avatar.jsx';
 import Badge from '../common/Badge.jsx';
-import Spinner from '../common/Spinner.jsx';
+import EmptyState from '../common/EmptyState.jsx';
+import ConversationListSkeleton from '../common/skeletons/ConversationListSkeleton.jsx';
 import ConversationListItem from '../chat/ConversationListItem.jsx';
 import PresenceDot from '../chat/PresenceDot.jsx';
 
@@ -324,17 +325,16 @@ const Sidebar = () => {
   const renderListBody = () => {
     if (showSearchResults) {
       if (isSearching) {
-        return (
-          <div className="flex items-center justify-center py-8">
-            <Spinner size="md" />
-          </div>
-        );
+        return <ConversationListSkeleton rows={4} />;
       }
       if (searchResults.length === 0) {
         return (
-          <p className="px-3 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
-            No users matched "{debouncedQuery}".
-          </p>
+          <EmptyState
+            icon={Search}
+            title="No users found"
+            description={`No accounts matched "${debouncedQuery}". Try a different name or @username.`}
+            className="py-8"
+          />
         );
       }
       return (
@@ -392,19 +392,11 @@ const Sidebar = () => {
     }
 
     if (activeTab === 'archived' && isLoadingArchived) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Spinner size="md" />
-        </div>
-      );
+      return <ConversationListSkeleton rows={5} />;
     }
 
     if (isLoading && conversations.length === 0) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Spinner size="md" />
-        </div>
-      );
+      return <ConversationListSkeleton rows={6} />;
     }
 
     if (error && conversations.length === 0) {
@@ -426,14 +418,30 @@ const Sidebar = () => {
 
     if (visibleConversations.length === 0) {
       const emptyCopy = {
-        all: 'No conversations yet. Start one with the "+ New" button.',
-        unread: 'You\'re all caught up.',
-        archived: 'No archived conversations.',
+        all: {
+          title: 'No conversations yet',
+          description: 'Start a chat with the "+ New" button or search for someone above.',
+          action: openNewChat,
+          actionLabel: 'Start a chat',
+        },
+        unread: {
+          title: "You're all caught up",
+          description: 'New messages will appear here as soon as they arrive.',
+        },
+        archived: {
+          title: 'No archived chats',
+          description: 'Conversations you archive show up here for safekeeping.',
+        },
       }[activeTab];
       return (
-        <p className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
-          {emptyCopy}
-        </p>
+        <EmptyState
+          icon={MessageCircle}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+          action={emptyCopy.action}
+          actionLabel={emptyCopy.actionLabel}
+          className="py-8"
+        />
       );
     }
 

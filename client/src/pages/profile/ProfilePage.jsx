@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 
 import Avatar from '../../components/common/Avatar.jsx';
 import EmptyState from '../../components/common/EmptyState.jsx';
-import Spinner from '../../components/common/Spinner.jsx';
+import ProfileSkeleton from '../../components/common/skeletons/ProfileSkeleton.jsx';
 import BlockUserModal from '../../components/modals/BlockUserModal.jsx';
 import ReportModal from '../../components/modals/ReportModal.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -196,11 +196,7 @@ const ProfilePage = () => {
   /* ---------- Render branches ---------- */
 
   if (state.loading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (state.error || !targetUser) {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ImagePlus, Loader2, Trash2, Users, X } from 'lucide-react';
 
@@ -10,6 +9,7 @@ import * as conversationService from '../../api/conversation.service.js';
 import { uploadGroupAvatar } from '../../api/upload.service.js';
 import { GROUP_RULES } from '../../utils/constants.js';
 import Avatar from '../common/Avatar.jsx';
+import CharacterCounter from '../common/CharacterCounter.jsx';
 import Modal from '../common/Modal.jsx';
 import UserSearchInput from '../chat/UserSearchInput.jsx';
 
@@ -407,20 +407,14 @@ const NewGroupModal = ({ open, onClose }) => {
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               placeholder="e.g. Weekend trip planning"
             />
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] text-gray-500 dark:text-gray-400">
                 Visible to every member.
               </span>
-              <span
-                className={clsx(
-                  'text-[11px] tabular-nums',
-                  trimmedName.length === GROUP_RULES.NAME_MAX_LENGTH
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-gray-400 dark:text-gray-500',
-                )}
-              >
-                {trimmedName.length}/{GROUP_RULES.NAME_MAX_LENGTH}
-              </span>
+              <CharacterCounter
+                current={trimmedName.length}
+                max={GROUP_RULES.NAME_MAX_LENGTH}
+              />
             </div>
           </div>
 

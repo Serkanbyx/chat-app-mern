@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
+import CharacterCounter from '../common/CharacterCounter.jsx';
 import Modal from '../common/Modal.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { reportTarget } from '../../api/user.service.js';
@@ -157,9 +158,11 @@ const ReportModal = ({ open, onClose, targetType, targetId, targetLabel }) => {
             placeholder="What happened?"
             className="w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
           />
-          <span className="mt-1 block text-right text-[11px] text-gray-400">
-            {details.length}/{REPORT_DETAILS_MAX_LENGTH}
-          </span>
+          <CharacterCounter
+            current={details.length}
+            max={REPORT_DETAILS_MAX_LENGTH}
+            className="mt-1"
+          />
         </label>
 
         {error ? (

@@ -15,7 +15,7 @@ import Avatar from '../../components/common/Avatar.jsx';
 import Badge from '../../components/common/Badge.jsx';
 import ConfirmModal from '../../components/common/ConfirmModal.jsx';
 import EmptyState from '../../components/common/EmptyState.jsx';
-import Spinner from '../../components/common/Spinner.jsx';
+import AdminTableSkeleton from '../../components/common/skeletons/AdminTableSkeleton.jsx';
 import {
   forceDeleteMessage,
   getConversationMessages,
@@ -260,9 +260,7 @@ const AdminMessages = () => {
           description="Every message read here is logged to the admin audit trail. Force-deletion broadcasts a redaction to every participant in real time."
         />
       ) : state.loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
-        </div>
+        <AdminTableSkeleton rows={6} columns={4} />
       ) : state.error ? (
         <EmptyState
           icon={ShieldAlert}

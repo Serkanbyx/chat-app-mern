@@ -10,11 +10,13 @@ import {
   useState,
 } from 'react';
 import clsx from 'clsx';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, MessageCircle } from 'lucide-react';
 
 import MessageBubble from './MessageBubble.jsx';
 import TypingIndicator from './TypingIndicator.jsx';
+import EmptyState from '../common/EmptyState.jsx';
 import Spinner from '../common/Spinner.jsx';
+import MessagesListSkeleton from '../common/skeletons/MessagesListSkeleton.jsx';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll.js';
 import {
   formatDaySeparator,
@@ -283,11 +285,13 @@ const MessagesList = forwardRef(
     /* ---------- Render ---------- */
     if (isLoadingInitial && messages.length === 0) {
       return (
-        <div className="flex flex-1 items-center justify-center">
-          <Spinner size="md" />
+        <div className="flex min-h-0 flex-1 overflow-hidden bg-gray-50 dark:bg-gray-950">
+          <MessagesListSkeleton />
         </div>
       );
     }
+
+    const showEmptyState = !isLoadingInitial && messages.length === 0;
 
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -296,6 +300,16 @@ const MessagesList = forwardRef(
           onScroll={handleScroll}
           className="scrollbar-thin flex-1 overflow-y-auto bg-gray-50 px-2 py-3 dark:bg-gray-950"
         >
+          {showEmptyState ? (
+            <div className="flex h-full items-center justify-center px-4 py-8">
+              <EmptyState
+                icon={MessageCircle}
+                title="No messages yet"
+                description="Say hi to break the ice — your first message starts the conversation."
+                className="border-transparent bg-transparent dark:border-transparent"
+              />
+            </div>
+          ) : null}
           {/* Top sentinel: visible only when there's older history left. */}
           {hasMore ? (
             <div ref={sentinelRef} className="flex h-8 items-center justify-center">

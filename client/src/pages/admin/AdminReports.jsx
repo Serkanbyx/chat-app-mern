@@ -14,6 +14,8 @@ import Modal from '../../components/common/Modal.jsx';
 import Spinner from '../../components/common/Spinner.jsx';
 import Avatar from '../../components/common/Avatar.jsx';
 import Badge from '../../components/common/Badge.jsx';
+import CharacterCounter from '../../components/common/CharacterCounter.jsx';
+import AdminTableSkeleton from '../../components/common/skeletons/AdminTableSkeleton.jsx';
 import ReportRow from '../../components/admin/ReportRow.jsx';
 import {
   forceDeleteMessage,
@@ -297,9 +299,7 @@ const AdminReports = () => {
       </section>
 
       {state.loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
-        </div>
+        <AdminTableSkeleton rows={6} columns={5} />
       ) : state.error ? (
         <EmptyState
           icon={AlertTriangle}
@@ -582,9 +582,11 @@ const ReportDetailModal = ({
                 placeholder="Internal note for the audit log…"
                 className="w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
-              <span className="mt-1 block text-right text-[11px] text-gray-400">
-                {reviewNote.length}/{REVIEW_NOTE_MAX}
-              </span>
+              <CharacterCounter
+                current={reviewNote.length}
+                max={REVIEW_NOTE_MAX}
+                className="mt-1"
+              />
             </label>
           </section>
         </div>

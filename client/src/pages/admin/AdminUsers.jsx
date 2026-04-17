@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 
 import ConfirmModal from '../../components/common/ConfirmModal.jsx';
 import EmptyState from '../../components/common/EmptyState.jsx';
-import Spinner from '../../components/common/Spinner.jsx';
+import AdminTableSkeleton from '../../components/common/skeletons/AdminTableSkeleton.jsx';
 import UserRow from '../../components/admin/UserRow.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';
@@ -367,9 +367,7 @@ const AdminUsers = () => {
       </section>
 
       {state.loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
-        </div>
+        <AdminTableSkeleton rows={8} columns={4} />
       ) : state.error ? (
         <EmptyState
           icon={UsersIcon}

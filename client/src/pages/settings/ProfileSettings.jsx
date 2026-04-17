@@ -3,6 +3,7 @@ import { Camera, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import Avatar from '../../components/common/Avatar.jsx';
+import CharacterCounter from '../../components/common/CharacterCounter.jsx';
 import Spinner from '../../components/common/Spinner.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { updateProfile } from '../../api/auth.service.js';
@@ -240,9 +241,11 @@ const ProfileSettings = () => {
             placeholder="Tell people a little about yourself…"
             className="block w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
           />
-          <span className="mt-1 block text-right text-[11px] text-gray-400">
-            {bio.length}/{PROFILE_RULES.BIO_MAX_LENGTH}
-          </span>
+          <CharacterCounter
+            current={bio.length}
+            max={PROFILE_RULES.BIO_MAX_LENGTH}
+            className="mt-1"
+          />
         </label>
       </section>
 
