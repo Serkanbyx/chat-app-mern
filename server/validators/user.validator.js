@@ -51,10 +51,38 @@ export const validateUsername = [
 ];
 
 /**
- * Strict per-field guards for the preferences subdocument. Any field NOT
- * listed here is silently dropped by the controller's whitelist — adding
- * a new preference therefore requires touching both files (intentional).
+ * Strict per-field guards for the preferences subdocument. Two layers
+ * of safety are applied:
+ *
+ *  1. Each known field is validated against its enum / type.
+ *  2. The body root is validated against an allow-list of keys — any
+ *     unknown key (top-level OR inside `notifications`) is rejected
+ *     with a 400 instead of being silently dropped. This protects
+ *     against typos AND against a future field rename leaving stale
+ *     payloads in flight from cached clients.
+ *
+ * Adding a new preference therefore requires touching THREE places:
+ * this allow-list, the per-field rule above, and the controller
+ * whitelist (`PREFERENCE_PATHS` in user.controller.js). The triple-edit
+ * is intentional — it forces a deliberate decision per addition.
  */
+const ALLOWED_PREFERENCE_KEYS = Object.freeze([
+  'theme',
+  'fontSize',
+  'contentDensity',
+  'animations',
+  'enterToSend',
+  'showReadReceipts',
+  'showOnlineStatus',
+  'notifications',
+]);
+
+const ALLOWED_NOTIFICATION_KEYS = Object.freeze([
+  'browser',
+  'sound',
+  'muteAll',
+]);
+
 export const validatePreferences = [
   body('theme').optional().isIn(THEME).withMessage(`theme must be one of: ${THEME.join(', ')}`),
   body('fontSize').optional().isIn(FONT_SIZE).withMessage(`fontSize must be one of: ${FONT_SIZE.join(', ')}`),
@@ -70,11 +98,32 @@ export const validatePreferences = [
   body('notifications.browser').optional().isBoolean().withMessage('notifications.browser must be boolean').toBoolean(),
   body('notifications.sound').optional().isBoolean().withMessage('notifications.sound must be boolean').toBoolean(),
   body('notifications.muteAll').optional().isBoolean().withMessage('notifications.muteAll must be boolean').toBoolean(),
-  // At least one updatable key must be present.
   body().custom((value) => {
-    if (!value || typeof value !== 'object' || Object.keys(value).length === 0) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Request body must be a JSON object');
+    }
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
       throw new Error('Provide at least one preference field to update');
     }
+
+    const unknown = keys.filter((k) => !ALLOWED_PREFERENCE_KEYS.includes(k));
+    if (unknown.length > 0) {
+      throw new Error(`Unknown preference field(s): ${unknown.join(', ')}`);
+    }
+
+    if (value.notifications && typeof value.notifications === 'object') {
+      const notifKeys = Object.keys(value.notifications);
+      const unknownNotif = notifKeys.filter(
+        (k) => !ALLOWED_NOTIFICATION_KEYS.includes(k),
+      );
+      if (unknownNotif.length > 0) {
+        throw new Error(
+          `Unknown notifications field(s): ${unknownNotif.join(', ')}`,
+        );
+      }
+    }
+
     return true;
   }),
   validate,

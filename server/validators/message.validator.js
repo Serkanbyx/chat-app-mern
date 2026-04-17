@@ -1,5 +1,6 @@
 import { body, query } from 'express-validator';
 import { validate } from '../middlewares/validate.middleware.js';
+import { cloudinaryUrlValidator } from '../config/cloudinary.js';
 import {
   MESSAGE_TYPES,
   MESSAGE_TEXT_MAX_LENGTH,
@@ -30,8 +31,10 @@ export const validateMessageQuery = [
 const SEND_MESSAGE_TYPES = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.IMAGE];
 
 /**
- * REST-fallback send. The Cloudinary URL whitelist lives in the service
- * (single source of truth) — this validator only enforces shape.
+ * REST-fallback send. The Cloudinary URL whitelist is enforced both
+ * here (fail-fast 400 with a structured error map) AND inside
+ * `messageService.createMessage` (defence-in-depth — the service is
+ * the source of truth for socket-emitted messages too).
  */
 export const validateSendMessage = [
   body('type')
@@ -52,7 +55,12 @@ export const validateSendMessage = [
   body('imageUrl')
     .if((_value, { req }) => req.body?.type === MESSAGE_TYPES.IMAGE)
     .isURL({ protocols: ['https', 'http'], require_protocol: true })
-    .withMessage('imageUrl must be a valid http(s) URL'),
+    .withMessage('imageUrl must be a valid http(s) URL')
+    .bail()
+    // Image messages MUST reference our Cloudinary cloud — otherwise a
+    // client could broadcast arbitrary external URLs (tracking pixels,
+    // attacker hosts) to every participant of the conversation.
+    .custom(cloudinaryUrlValidator),
   body('imagePublicId')
     .optional({ values: 'falsy' })
     .isString()

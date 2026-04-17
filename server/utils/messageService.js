@@ -5,7 +5,7 @@ import { User } from '../models/User.js';
 import { ApiError } from './apiError.js';
 import { assertParticipant, resetUnread } from './conversationService.js';
 import { escapeRegex } from './escapeRegex.js';
-import { env } from '../config/env.js';
+import { isAllowedCloudinaryUrl } from '../config/cloudinary.js';
 import {
   CONVERSATION_TYPES,
   MESSAGE_TYPES,
@@ -38,28 +38,6 @@ const isValidObjectId = (value) =>
  * a message bubble.
  */
 const SENDER_PROJECTION = '_id username displayName avatarUrl';
-
-/**
- * Allowed Cloudinary CDN host for image messages. Built once at module
- * load — if cloud name is missing (e.g. local dev), image messages are
- * rejected outright rather than accepting arbitrary URLs.
- */
-const buildAllowedCloudinaryPrefixes = () => {
-  const cloudName = env.CLOUDINARY_CLOUD_NAME?.trim();
-  if (!cloudName) return [];
-  return [
-    `https://res.cloudinary.com/${cloudName}/`,
-    `http://res.cloudinary.com/${cloudName}/`,
-  ];
-};
-
-const ALLOWED_IMAGE_PREFIXES = buildAllowedCloudinaryPrefixes();
-
-const isAllowedCloudinaryUrl = (url) => {
-  if (typeof url !== 'string' || url.length === 0) return false;
-  if (ALLOWED_IMAGE_PREFIXES.length === 0) return false;
-  return ALLOWED_IMAGE_PREFIXES.some((prefix) => url.startsWith(prefix));
-};
 
 /**
  * Strip control characters, neutralize the four HTML "structural" chars

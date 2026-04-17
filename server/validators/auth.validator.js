@@ -1,5 +1,6 @@
 import { body } from 'express-validator';
 import { validate } from '../middlewares/validate.middleware.js';
+import { cloudinaryUrlValidator } from '../config/cloudinary.js';
 import {
   USERNAME_REGEX,
   USERNAME_MIN_LENGTH,
@@ -63,8 +64,16 @@ export const validateUpdateProfile = [
     .withMessage(`Bio must be at most ${BIO_MAX_LENGTH} characters`)
     .trim()
     .escape(),
-  body('avatarUrl').optional({ values: 'falsy' }).isURL({ protocols: ['http', 'https'], require_protocol: true })
-    .withMessage('Avatar URL must be a valid http(s) URL'),
+  body('avatarUrl')
+    .optional({ values: 'falsy' })
+    .isURL({ protocols: ['http', 'https'], require_protocol: true })
+    .withMessage('Avatar URL must be a valid http(s) URL')
+    .bail()
+    // Avatar URLs MUST come from our own Cloudinary cloud — otherwise a
+    // client could store an arbitrary URL (tracking pixel, attacker host,
+    // unsafe scheme on a misconfigured renderer) in a public profile
+    // field that other users will load.
+    .custom(cloudinaryUrlValidator),
   body('avatarPublicId').optional().isString().isLength({ max: 200 })
     .withMessage('avatarPublicId is too long'),
   validate,

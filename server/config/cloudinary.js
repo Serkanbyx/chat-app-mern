@@ -10,6 +10,53 @@ cloudinary.config({
 });
 
 /**
+ * Allow-list of fully-qualified Cloudinary CDN prefixes for the
+ * configured cloud name. Computed once at module load — when the
+ * cloud name is missing (e.g. local dev without credentials) the
+ * list is empty and every URL is rejected, which is exactly what we
+ * want: an unconfigured server should never accept arbitrary image
+ * URLs from clients.
+ *
+ * Centralised here (instead of being duplicated inside services and
+ * validators) so changing the policy — e.g. dropping http://, or
+ * widening to a custom CNAME — is a single-file edit.
+ */
+const ALLOWED_CLOUDINARY_PREFIXES = (() => {
+  const cloudName = env.CLOUDINARY_CLOUD_NAME?.trim();
+  if (!cloudName) return [];
+  return Object.freeze([
+    `https://res.cloudinary.com/${cloudName}/`,
+    `http://res.cloudinary.com/${cloudName}/`,
+  ]);
+})();
+
+/**
+ * Strict check: does `url` resolve to an asset on OUR Cloudinary
+ * cloud? A plain `isURL()` is not enough — without the prefix gate,
+ * a malicious client could inject any URL (tracking pixel, attacker
+ * CDN, javascript: URI on misconfigured viewers) into a message
+ * `imageUrl` or an `avatarUrl` field.
+ */
+export const isAllowedCloudinaryUrl = (url) => {
+  if (typeof url !== 'string' || url.length === 0) return false;
+  if (ALLOWED_CLOUDINARY_PREFIXES.length === 0) return false;
+  return ALLOWED_CLOUDINARY_PREFIXES.some((prefix) => url.startsWith(prefix));
+};
+
+/**
+ * Reusable express-validator `.custom()` callback. Accepts the
+ * empty string (used to clear an avatar) but rejects anything else
+ * that does not point at our configured Cloudinary cloud.
+ */
+export const cloudinaryUrlValidator = (value) => {
+  if (value === undefined || value === null || value === '') return true;
+  if (!isAllowedCloudinaryUrl(value)) {
+    throw new Error('URL must point to the configured Cloudinary CDN');
+  }
+  return true;
+};
+
+/**
  * Upload an in-memory file buffer to Cloudinary.
  * @param {Buffer} buffer  raw file bytes (e.g. from multer.memoryStorage()).
  * @param {string} folder  Cloudinary folder name.

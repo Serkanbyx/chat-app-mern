@@ -1,5 +1,6 @@
 import { body, query } from 'express-validator';
 import { validate } from '../middlewares/validate.middleware.js';
+import { cloudinaryUrlValidator } from '../config/cloudinary.js';
 import {
   GROUP_NAME_MAX_LENGTH,
   GROUP_MAX_PARTICIPANTS,
@@ -20,7 +21,12 @@ const avatarUrlRule = () =>
   body('avatarUrl')
     .optional({ values: 'falsy' })
     .isURL({ protocols: ['http', 'https'], require_protocol: true })
-    .withMessage('avatarUrl must be a valid http(s) URL');
+    .withMessage('avatarUrl must be a valid http(s) URL')
+    .bail()
+    // Group avatars are echoed to every participant — restricting them to
+    // our Cloudinary cloud removes the entire "avatar URL injection"
+    // class (arbitrary tracking pixels, attacker CDNs, etc.).
+    .custom(cloudinaryUrlValidator);
 
 export const validateCreateDirect = [
   body('userId').isMongoId().withMessage('userId must be a valid id'),
