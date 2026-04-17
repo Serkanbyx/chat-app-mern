@@ -66,9 +66,15 @@ export const forceDeleteMessage = async (id) => {
   return data;
 };
 
-export const getConversationMessages = async (id, { before, limit = 50 } = {}) => {
+/**
+ * Read-only audit window into any conversation. Server uses
+ * offset-based pagination (`page`/`limit`) — every successful access
+ * is appended to `AdminAuditLog` server-side, so callers can rely on
+ * the leak being recorded even before the response resolves.
+ */
+export const getConversationMessages = async (id, { page = 1, limit = 30 } = {}) => {
   const { data } = await api.get(`/admin/conversations/${id}/messages`, {
-    params: { before, limit },
+    params: { page, limit },
   });
   return data;
 };
