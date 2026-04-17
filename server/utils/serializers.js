@@ -55,4 +55,53 @@ export const serializePublicUser = (user) => {
   };
 };
 
-export default { serializeMessage, serializePublicUser, PUBLIC_SENDER_PROJECTION };
+/**
+ * Public notification shape exposed on REST + WebSocket payloads.
+ *
+ * The caller may pass a Mongoose document or a `lean()`-ed plain
+ * object — we normalise both to a shallow plain object first. The
+ * `actor` field can come back as an ObjectId (lean, no populate) OR a
+ * populated user subdocument; `serializePublicUser` handles both.
+ *
+ * Server-internal fields (`__v`, anything that might leak the schema
+ * shape) are omitted by selecting an explicit allow-list rather than
+ * stripping a deny-list — newer schema fields cannot accidentally leak.
+ */
+export const serializeNotification = (doc) => {
+  if (!doc) return null;
+  const obj =
+    typeof doc.toObject === 'function'
+      ? doc.toObject({ virtuals: false, versionKey: false })
+      : { ...doc };
+
+  // Resolve `actor`: populated → public user shape; bare ObjectId → null
+  // for the embedded copy and the raw id stays available on `actorId`.
+  let actor = null;
+  let actorId = null;
+  if (obj.actor && typeof obj.actor === 'object' && obj.actor._id) {
+    actor = serializePublicUser(obj.actor);
+    actorId = String(obj.actor._id);
+  } else if (obj.actor) {
+    actorId = String(obj.actor);
+  }
+
+  return {
+    _id: String(obj._id),
+    type: obj.type,
+    text: obj.text,
+    isRead: Boolean(obj.isRead),
+    conversationId: obj.conversationId ? String(obj.conversationId) : null,
+    messageId: obj.messageId ? String(obj.messageId) : null,
+    actor,
+    actorId,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+  };
+};
+
+export default {
+  serializeMessage,
+  serializePublicUser,
+  serializeNotification,
+  PUBLIC_SENDER_PROJECTION,
+};

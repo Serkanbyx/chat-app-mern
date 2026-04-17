@@ -53,3 +53,21 @@ export const GROUP_NAME_MAX_LENGTH = 50;
 export const GROUP_MIN_PARTICIPANTS = 2;
 export const GROUP_MAX_PARTICIPANTS = 100;
 export const DIRECT_PARTICIPANTS = 2;
+
+export const NOTIFICATION_TYPES = Object.freeze({
+  MESSAGE: 'message',
+  MENTION: 'mention',
+  GROUP_INVITE: 'groupInvite',
+  ADMIN_ACTION: 'adminAction',
+});
+
+// Hard cap on the rendered preview text. Browser Notification bodies
+// truncate beyond ~150 chars anyway; 200 leaves room for short
+// templates ("{actor}: {preview}") without the preview being clipped
+// to nothing for normal display names.
+export const NOTIFICATION_TEXT_MAX_LENGTH = 200;
+
+// Anti-spam collapse window for "new message" notifications. Inside
+// this window, repeated messages from the same conversation overwrite
+// the existing unread notification instead of stacking new rows.
+export const NOTIFICATION_COLLAPSE_WINDOW_MS = 30 * 1000;

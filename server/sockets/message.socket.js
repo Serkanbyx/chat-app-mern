@@ -16,7 +16,12 @@ import {
   markConversationAsRead,
 } from '../utils/messageService.js';
 import { safeDestroy } from '../config/cloudinary.js';
-import { serializeMessage, serializePublicUser } from '../utils/serializers.js';
+import {
+  serializeMessage,
+  serializeNotification,
+  serializePublicUser,
+} from '../utils/serializers.js';
+import { persistMessageNotification } from '../utils/notificationService.js';
 import { convRoom, userRoom } from './rooms.js';
 import {
   addActiveViewer,
@@ -109,7 +114,9 @@ const loadConversationContext = async (conversationId, senderId) => {
  *   - Recipient must NOT have muted the conversation.
  *
  * One DB query batches the mute lookup so the cost is O(1) round-trips
- * regardless of group size.
+ * regardless of group size. Each surviving recipient also gets a
+ * persisted `Notification` row (with 30s collapse) so the inbox view
+ * survives reloads — see `persistMessageNotification`.
  */
 const emitNotifications = async ({
   io,
@@ -136,16 +143,44 @@ const emitNotifications = async ({
   ).lean();
   const mutedSet = new Set(mutedRows.map((u) => String(u._id)));
 
-  const payload = {
-    conversationId: String(conversationId),
-    message,
-    fromUser: serializePublicUser(fromUser),
-  };
+  const senderIdString = message?.sender?._id ? String(message.sender._id) : null;
+  const messageIdString = message?._id ? String(message._id) : null;
+  const fromUserWire = serializePublicUser(fromUser);
 
-  for (const recipientId of candidateIds) {
-    if (mutedSet.has(recipientId)) continue;
-    io.to(userRoom(recipientId)).emit('notification:new', payload);
-  }
+  // Persist + emit per recipient. Done in parallel so a slow Mongo
+  // response for one recipient does not delay another's live event.
+  await Promise.all(
+    candidateIds.map(async (recipientId) => {
+      if (mutedSet.has(recipientId)) return;
+
+      let notificationWire = null;
+      try {
+        const persisted = await persistMessageNotification({
+          recipientId,
+          conversationId,
+          messageId: messageIdString,
+          actorId: senderIdString,
+          message,
+          fromUser,
+        });
+        notificationWire = serializeNotification(persisted);
+      } catch (err) {
+        // Persistence failure must NOT block the live notification —
+        // the client still gets the toast/sound, only the inbox row is
+        // missing. Log in non-prod for diagnostics.
+        if (!isProduction) {
+          console.warn('[emitNotifications] persist failed:', err?.message || err);
+        }
+      }
+
+      io.to(userRoom(recipientId)).emit('notification:new', {
+        conversationId: String(conversationId),
+        message,
+        fromUser: fromUserWire,
+        notification: notificationWire,
+      });
+    }),
+  );
 };
 
 /* ---------- Broadcaster helpers ---------- */
