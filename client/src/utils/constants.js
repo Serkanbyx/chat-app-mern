@@ -69,6 +69,29 @@ export const DEFAULT_PREFERENCES = Object.freeze({
 });
 
 /* ------------------------------------------------------------------
+ * Auth field rules
+ *
+ * Mirror the server-side validators (`server/utils/constants.js` +
+ * `server/validators/auth.validator.js`) so the client can echo the
+ * SAME constraints the API enforces. Duplicated rather than imported
+ * so the bundle stays decoupled from the backend codebase — keep both
+ * sides in sync when editing.
+ *
+ * SECURITY: these are UX-only previews. The server is always the
+ * authority; never bypass server validation because a client check
+ * passed.
+ * ------------------------------------------------------------------ */
+export const AUTH_RULES = Object.freeze({
+  USERNAME_REGEX: /^[a-zA-Z0-9_]+$/,
+  USERNAME_MIN_LENGTH: 3,
+  USERNAME_MAX_LENGTH: 20,
+  DISPLAY_NAME_MIN_LENGTH: 2,
+  DISPLAY_NAME_MAX_LENGTH: 40,
+  PASSWORD_MIN_LENGTH: 8,
+  PASSWORD_COMPLEXITY: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+});
+
+/* ------------------------------------------------------------------
  * Notification system
  * ------------------------------------------------------------------ */
 export const NOTIFICATION_SOUND_URL = '/notification-sound.mp3';
