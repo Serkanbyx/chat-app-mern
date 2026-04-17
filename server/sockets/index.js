@@ -16,6 +16,8 @@ import {
   clearTypingForUser,
   registerTypingHandlers,
 } from './typing.socket.js';
+import { registerMessageHandlers } from './message.socket.js';
+import { clearActiveForSocket } from './activeConversations.js';
 import { convRoom, userRoom } from './rooms.js';
 
 /**
@@ -87,9 +89,10 @@ export const registerSocketHandlers = (io) => {
       // in one feature can't bring down the whole socket layer.
       registerPresenceHandlers(io, socket); // STEP 14
       registerTypingHandlers(io, socket); // STEP 14
-      // STEP 15 will register:
-      //   registerMessageHandlers(io, socket);
-      //   registerGroupHandlers(io, socket);
+      registerMessageHandlers(io, socket); // STEP 15
+      // Group lifecycle events are emitted from REST controllers via
+      // helpers in `sockets/group.socket.js` — there is no per-socket
+      // listener to register here.
 
       if (!isProduction) {
         console.log(
@@ -109,6 +112,11 @@ export const registerSocketHandlers = (io) => {
 
     socket.on('disconnect', async (reason) => {
       try {
+        // Drop any "chat window open" claim this socket held so the
+        // notification suppression refcount stays balanced even when
+        // the client never sent an explicit `conversation:close`.
+        clearActiveForSocket(socket);
+
         const remaining = removeUserSocket(userId, socket.id);
 
         // Only the LAST socket dropping flips the user offline. While

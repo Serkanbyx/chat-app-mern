@@ -10,21 +10,13 @@ import {
 } from '../utils/messageService.js';
 import { MESSAGE_TYPES } from '../utils/constants.js';
 import { safeDestroy } from '../config/cloudinary.js';
-
-/**
- * Strip server-only / per-user fields before sending a message to the
- * client. `hiddenFor` is a server-side bookkeeping array — never expose
- * the list of users who hid the message.
- */
-const serializeMessage = (doc) => {
-  if (!doc) return null;
-  const obj =
-    typeof doc.toObject === 'function'
-      ? doc.toObject({ virtuals: false, versionKey: false })
-      : { ...doc };
-  delete obj.hiddenFor;
-  return obj;
-};
+import { serializeMessage } from '../utils/serializers.js';
+import {
+  broadcastNewMessage,
+  broadcastEditedMessage,
+  broadcastDeletedMessage,
+  broadcastReactionUpdated,
+} from '../sockets/message.socket.js';
 
 // GET /api/conversations/:id/messages
 export const getMessages = asyncHandler(async (req, res) => {
@@ -67,6 +59,18 @@ export const sendMessage = asyncHandler(async (req, res) => {
     replyTo,
   });
 
+  // Fan out to every device in the conversation room AND trigger the
+  // notification dispatch for offline / unfocused recipients. REST has
+  // no originating socket id, so we cannot exclude one — the calling
+  // device will receive the same payload via WebSocket and is expected
+  // to dedupe by `_id` (matches the optimistic-UI contract).
+  const io = req.app.get('io');
+  if (io) {
+    broadcastNewMessage(io, { message }).catch((err) => {
+      console.error('[sendMessage] broadcast failed:', err);
+    });
+  }
+
   res.status(201).json({ success: true, data: serializeMessage(message) });
 });
 
@@ -77,6 +81,10 @@ export const editMessageController = asyncHandler(async (req, res) => {
     actor: req.user,
     text: req.body.text,
   });
+
+  const io = req.app.get('io');
+  if (io) broadcastEditedMessage(io, { message: updated });
+
   res.status(200).json({ success: true, data: serializeMessage(updated) });
 });
 
@@ -89,10 +97,31 @@ export const deleteMessageController = asyncHandler(async (req, res) => {
     scope,
   });
 
+  const io = req.app.get('io');
+  const conversationId = String(result.message.conversationId);
+
   if (result.scope === 'self') {
+    if (io) {
+      // 'self' scope only reaches the actor's other devices — never the
+      // rest of the conversation. The broadcaster enforces this routing.
+      broadcastDeletedMessage(io, {
+        conversationId,
+        messageId: req.params.id,
+        scope: 'self',
+        actorUserId: req.user._id,
+      });
+    }
     return res
       .status(200)
       .json({ success: true, data: { id: req.params.id, scope: 'self' } });
+  }
+
+  if (io) {
+    broadcastDeletedMessage(io, {
+      conversationId,
+      messageId: req.params.id,
+      scope: 'everyone',
+    });
   }
 
   // Permanent delete: orphaned Cloudinary assets become billable storage
@@ -118,6 +147,9 @@ export const toggleReactionController = asyncHandler(async (req, res) => {
     actor: req.user,
     emoji: req.body.emoji,
   });
+
+  const io = req.app.get('io');
+  if (io) broadcastReactionUpdated(io, { message });
 
   res.status(200).json({
     success: true,

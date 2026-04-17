@@ -19,8 +19,37 @@ import {
   GROUP_MAX_PARTICIPANTS,
   USER_STATUS,
 } from '../utils/constants.js';
+import {
+  broadcastNewMessage,
+  broadcastReadReceipt,
+} from '../sockets/message.socket.js';
+import {
+  emitGroupCreated,
+  emitGroupMemberAdded,
+  emitGroupMemberRemoved,
+  emitGroupUpdated,
+  emitGroupAdminChanged,
+} from '../sockets/group.socket.js';
 
 const { Types } = mongoose;
+
+/**
+ * Persist a system message AND broadcast it via `message:new` so every
+ * connected participant sees the timeline event instantly. The post-save
+ * hook on Message already refreshes `Conversation.lastMessage`; this
+ * helper just wraps the socket fan-out so the controllers stay tidy.
+ *
+ * Notification dispatch is a no-op for system messages because
+ * `broadcastNewMessage` skips when `sender` is null.
+ */
+const emitSystemMessage = async (io, message) => {
+  if (!io || !message) return;
+  try {
+    await broadcastNewMessage(io, { message });
+  } catch (err) {
+    console.error('[emitSystemMessage] broadcast failed:', err);
+  }
+};
 
 /**
  * Public projection for any populated participant. We pull
@@ -250,6 +279,15 @@ export const createGroup = asyncHandler(async (req, res) => {
   });
 
   const data = await populateAndSerialize(created, req.user._id);
+
+  // Broadcast `group:created` to every member so their other devices
+  // pick the new conversation up + auto-join the conv room. The HTTP
+  // response already gives the creator's calling device a copy.
+  const io = req.app.get('io');
+  if (io) {
+    emitGroupCreated(io, { conversation: data, memberIds: participants });
+  }
+
   res.status(201).json({ success: true, data });
 });
 
@@ -304,19 +342,42 @@ export const updateConversation = asyncHandler(async (req, res) => {
 
   await conversation.save();
 
+  const io = req.app.get('io');
+
   // System message must be emitted AFTER the save so the post-save hook
   // sees the new name on the parent doc when refreshing lastMessage.
   if (renamedTo) {
-    await createSystemMessage({
+    const sysMsg = await createSystemMessage({
       conversationId: conversation._id,
       text: buildSystemMessageText(
         '{actor} renamed the group from "{from}" to "{to}"',
         { actor: req.user.displayName, from: renamedFrom, to: renamedTo },
       ),
     });
+    await emitSystemMessage(io, sysMsg);
   }
 
   const data = await populateAndSerialize(conversation, req.user._id);
+
+  // Patch the rest of the room with only the changed metadata so
+  // clients can do a targeted merge without replacing the participants
+  // array (which would clobber any in-flight presence updates).
+  if (io) {
+    const changes = {};
+    for (const key of ALLOWED) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        changes[key] = key === 'name' ? conversation.name : conversation.avatarUrl;
+      }
+    }
+    if (Object.keys(changes).length > 0) {
+      emitGroupUpdated(io, {
+        conversationId: conversation._id,
+        changes,
+        byUserId: req.user._id,
+      });
+    }
+  }
+
   res.status(200).json({ success: true, data });
 });
 
@@ -350,6 +411,8 @@ export const addMembers = asyncHandler(async (req, res) => {
   conversation.participants.push(...requestedIds);
   await conversation.save();
 
+  const io = req.app.get('io');
+
   // System message per added user — readable timeline event for everyone
   // already in the group. Display names are sanitized server-side inside
   // `buildSystemMessageText`.
@@ -357,16 +420,30 @@ export const addMembers = asyncHandler(async (req, res) => {
     .select('displayName')
     .lean();
   for (const added of addedDocs) {
-    await createSystemMessage({
+    const sysMsg = await createSystemMessage({
       conversationId: conversation._id,
       text: buildSystemMessageText('{actor} added {target} to the group', {
         actor: req.user.displayName,
         target: added.displayName,
       }),
     });
+    await emitSystemMessage(io, sysMsg);
   }
 
   const data = await populateAndSerialize(conversation, req.user._id);
+
+  if (io) {
+    const addedUsers = (data.participants || []).filter((p) =>
+      requestedIds.includes(String(p._id)),
+    );
+    emitGroupMemberAdded(io, {
+      conversation: data,
+      addedUsers,
+      addedUserIds: requestedIds,
+      byUserId: req.user._id,
+    });
+  }
+
   res.status(200).json({ success: true, data });
 });
 
@@ -456,12 +533,27 @@ export const removeMember = asyncHandler(async (req, res) => {
 
   const updated = await removeParticipant({ conversation, targetId });
 
+  const io = req.app.get('io');
+
+  // Tear down the removed user's room subscription FIRST so the system
+  // message broadcast that follows does NOT reach them. Skip when the
+  // group was tombstoned (everyone is leaving anyway).
+  if (io && updated?.isActive) {
+    emitGroupMemberRemoved(io, {
+      conversationId: updated._id,
+      userId: targetId,
+      byUserId: req.user._id,
+      reason: isSelf ? 'left' : 'removed',
+    });
+  }
+
   // System message: distinguish self-leave from admin-kick so the timeline
   // reads naturally. Skip emission when the group was tombstoned (the
   // removal left fewer than 2 participants — there's nobody left to read it).
   if (updated?.isActive) {
+    let sysMsg;
     if (isSelf) {
-      await createSystemMessage({
+      sysMsg = await createSystemMessage({
         conversationId: updated._id,
         text: buildSystemMessageText('{actor} left the group', {
           actor: req.user.displayName,
@@ -469,7 +561,7 @@ export const removeMember = asyncHandler(async (req, res) => {
       });
     } else {
       const target = await User.findById(targetId).select('displayName').lean();
-      await createSystemMessage({
+      sysMsg = await createSystemMessage({
         conversationId: updated._id,
         text: buildSystemMessageText('{actor} removed {target} from the group', {
           actor: req.user.displayName,
@@ -477,6 +569,7 @@ export const removeMember = asyncHandler(async (req, res) => {
         }),
       });
     }
+    await emitSystemMessage(io, sysMsg);
   }
 
   await updated.populate({
@@ -518,14 +611,25 @@ export const promoteAdmin = asyncHandler(async (req, res) => {
     { new: true },
   ).populate({ path: 'participants', select: PARTICIPANT_PROJECTION });
 
+  const io = req.app.get('io');
+  if (io) {
+    emitGroupAdminChanged(io, {
+      conversationId: updated._id,
+      userId,
+      isAdmin: true,
+      byUserId: req.user._id,
+    });
+  }
+
   const target = await User.findById(userId).select('displayName').lean();
-  await createSystemMessage({
+  const sysMsg = await createSystemMessage({
     conversationId: updated._id,
     text: buildSystemMessageText('{actor} promoted {target} to admin', {
       actor: req.user.displayName,
       target: target?.displayName,
     }),
   });
+  await emitSystemMessage(io, sysMsg);
 
   res
     .status(200)
@@ -564,14 +668,25 @@ export const demoteAdmin = asyncHandler(async (req, res) => {
     { new: true },
   ).populate({ path: 'participants', select: PARTICIPANT_PROJECTION });
 
+  const io = req.app.get('io');
+  if (io) {
+    emitGroupAdminChanged(io, {
+      conversationId: updated._id,
+      userId,
+      isAdmin: false,
+      byUserId: req.user._id,
+    });
+  }
+
   const target = await User.findById(userId).select('displayName').lean();
-  await createSystemMessage({
+  const sysMsg = await createSystemMessage({
     conversationId: updated._id,
     text: buildSystemMessageText('{actor} removed admin from {target}', {
       actor: req.user.displayName,
       target: target?.displayName,
     }),
   });
+  await emitSystemMessage(io, sysMsg);
 
   res
     .status(200)
@@ -653,12 +768,14 @@ export const markRead = asyncHandler(async (req, res) => {
   const broadcast = req.user.preferences?.showReadReceipts !== false;
   const readAt = new Date().toISOString();
 
-  // STEP 15 wires the actual socket emission. The handler will read
-  // `broadcast` from this controller's response shape (or recompute it
-  // from the user doc) and only emit `conversationRead` when true:
-  //   io.to(`conversation:${conversationId}`)
-  //     .except(socketIdsFor(req.user._id))
-  //     .emit('conversationRead', { conversationId, userId, readAt });
+  const io = req.app.get('io');
+  if (io && broadcast) {
+    broadcastReadReceipt(io, {
+      conversationId: conversation._id,
+      userId: req.user._id,
+      readAt,
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -730,15 +847,27 @@ export const deleteConversation = asyncHandler(async (req, res) => {
     targetId: req.user._id,
   });
 
+  const io = req.app.get('io');
+
   // Only emit a "left the group" system event when there's actually a
   // group left to read it. Tombstoned (isActive: false) groups skip it.
   if (updated?.isActive) {
-    await createSystemMessage({
+    if (io) {
+      emitGroupMemberRemoved(io, {
+        conversationId: updated._id,
+        userId: req.user._id,
+        byUserId: req.user._id,
+        reason: 'left',
+      });
+    }
+
+    const sysMsg = await createSystemMessage({
       conversationId: updated._id,
       text: buildSystemMessageText('{actor} left the group', {
         actor: req.user.displayName,
       }),
     });
+    await emitSystemMessage(io, sysMsg);
   }
 
   res.status(200).json({
