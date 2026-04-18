@@ -30,6 +30,16 @@ export const uploadAvatar = async (file) => {
   return data;
 };
 
+/**
+ * Remove the current user's avatar — clears `avatarUrl` / `avatarPublicId`
+ * on the server AND destroys the Cloudinary asset. Idempotent: calling
+ * this with no avatar set returns `{ removed: false }` instead of erroring.
+ */
+export const removeAvatar = async () => {
+  const { data } = await api.delete('/upload/avatar');
+  return data;
+};
+
 export const uploadMessageImage = async (file) => {
   const { data } = await api.post('/upload/message-image', buildForm(file), {
     timeout: 60_000,

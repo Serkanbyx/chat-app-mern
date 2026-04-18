@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Camera, Loader2, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import Avatar from '../../components/common/Avatar.jsx';
 import CharacterCounter from '../../components/common/CharacterCounter.jsx';
+import ConfirmModal from '../../components/common/ConfirmModal.jsx';
 import Spinner from '../../components/common/Spinner.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { updateProfile } from '../../api/auth.service.js';
-import { uploadAvatar } from '../../api/upload.service.js';
+import { removeAvatar, uploadAvatar } from '../../api/upload.service.js';
 import { AUTH_RULES, PROFILE_RULES } from '../../utils/constants.js';
 
 /**
@@ -40,6 +41,8 @@ const ProfileSettings = () => {
   const [bio, setBio] = useState(user?.bio ?? '');
   const [previewUrl, setPreviewUrl] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarRemoving, setAvatarRemoving] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   /* Reset the local form whenever the upstream user changes (e.g. a
@@ -113,6 +116,32 @@ const ProfileSettings = () => {
     }
   };
 
+  /* Remove the persisted avatar AND the local preview. The dedicated
+   * server endpoint also destroys the Cloudinary asset so we don't leak
+   * orphaned blobs. We optimistically clear local state on success and
+   * fall back to a toast on failure. */
+  const handleAvatarRemove = async () => {
+    if (avatarRemoving) return;
+    setAvatarRemoving(true);
+    try {
+      await removeAvatar();
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+      updateUser({ avatarUrl: '', avatarPublicId: null });
+      toast.success('Avatar removed.');
+      setRemoveConfirmOpen(false);
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || 'Could not remove avatar.';
+      toast.error(message);
+      throw err; // keep the confirm modal open for retry
+    } finally {
+      setAvatarRemoving(false);
+    }
+  };
+
   const handleSave = async (event) => {
     event.preventDefault();
     if (saving || !isDirty || displayNameError) return;
@@ -146,6 +175,7 @@ const ProfileSettings = () => {
   };
 
   const avatarSrc = previewUrl ?? user.avatarUrl;
+  const hasAvatar = Boolean(user.avatarUrl) || Boolean(previewUrl);
 
   return (
     <form onSubmit={handleSave} className="space-y-8">
@@ -173,15 +203,28 @@ const ProfileSettings = () => {
           ) : null}
         </div>
         <div className="space-y-1">
-          <button
-            type="button"
-            onClick={handleAvatarPick}
-            disabled={avatarUploading}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            <Camera className="h-4 w-4" aria-hidden="true" />
-            <span>{avatarUploading ? 'Uploading…' : 'Change avatar'}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAvatarPick}
+              disabled={avatarUploading || avatarRemoving}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              <Camera className="h-4 w-4" aria-hidden="true" />
+              <span>{avatarUploading ? 'Uploading…' : 'Change avatar'}</span>
+            </button>
+            {hasAvatar ? (
+              <button
+                type="button"
+                onClick={() => setRemoveConfirmOpen(true)}
+                disabled={avatarUploading || avatarRemoving}
+                className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                <span>{avatarRemoving ? 'Removing…' : 'Remove'}</span>
+              </button>
+            ) : null}
+          </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             JPEG, PNG or WEBP. Max {PROFILE_RULES.AVATAR_MAX_SIZE_MB} MB.
           </p>
@@ -194,6 +237,22 @@ const ProfileSettings = () => {
           />
         </div>
       </section>
+
+      <ConfirmModal
+        open={removeConfirmOpen}
+        onClose={() => (avatarRemoving ? undefined : setRemoveConfirmOpen(false))}
+        onConfirm={handleAvatarRemove}
+        title="Remove avatar?"
+        description="Your profile will fall back to the default initial-based avatar."
+        confirmLabel={avatarRemoving ? 'Removing…' : 'Remove avatar'}
+        variant="danger"
+        disabled={avatarRemoving}
+      >
+        <p>
+          This will permanently delete your current avatar image. You can
+          upload a new one at any time.
+        </p>
+      </ConfirmModal>
 
       {/* Read-only identity */}
       <section className="grid gap-4 sm:grid-cols-2">

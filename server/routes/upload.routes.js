@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   uploadAvatarController,
+  deleteAvatarController,
   uploadMessageImageController,
 } from '../controllers/upload.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
@@ -52,6 +53,30 @@ router.post(
   handleUploadErrors,
   uploadAvatarController,
 );
+
+/**
+ * @openapi
+ * /api/upload/avatar:
+ *   delete:
+ *     tags: [Uploads]
+ *     summary: Remove the caller's avatar
+ *     description: Clears `avatarUrl` / `avatarPublicId` on the user and destroys the Cloudinary asset. Idempotent.
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     removed: { type: boolean }
+ *       401: { description: Unauthenticated }
+ */
+router.delete('/avatar', deleteAvatarController);
 
 /**
  * @openapi

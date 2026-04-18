@@ -226,8 +226,8 @@ const ProfilePage = () => {
           <div className="h-24 bg-linear-to-r from-brand-500 via-brand-600 to-brand-700 sm:h-32 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900" />
 
           <div className="relative px-5 pb-6 sm:px-8 sm:pb-8">
-            <div className="-mt-12 flex flex-col items-start gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-end gap-3">
+            <div className="-mt-10 flex flex-col items-start gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center gap-4">
                 <div className="rounded-full ring-4 ring-white dark:ring-gray-900">
                   <Avatar
                     src={targetUser.avatarUrl}
@@ -237,11 +237,11 @@ const ProfilePage = () => {
                     showStatus={!isSelf}
                   />
                 </div>
-                <div className="pb-1 sm:pb-2">
-                  <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl dark:text-white">
+                <div className="min-w-0">
+                  <h1 className="truncate text-xl font-semibold text-gray-900 sm:text-2xl dark:text-white">
                     {targetUser.displayName || targetUser.username}
                   </h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="truncate text-sm text-gray-500 dark:text-gray-400">
                     @{targetUser.username}
                   </p>
                 </div>

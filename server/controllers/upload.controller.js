@@ -35,6 +35,40 @@ export const uploadAvatarController = asyncHandler(async (req, res) => {
   });
 });
 
+// DELETE /api/upload/avatar
+//
+// Removes the caller's avatar — clears `avatarUrl` / `avatarPublicId`
+// on the user document AND destroys the Cloudinary asset so we don't
+// leak orphaned blobs. Idempotent: a user with no avatar gets a 200
+// with `removed: false` instead of a confusing error.
+export const deleteAvatarController = asyncHandler(async (req, res) => {
+  const previousPublicId = req.user.avatarPublicId;
+  const hadAvatar = Boolean(req.user.avatarUrl || previousPublicId);
+
+  if (!hadAvatar) {
+    return res.status(200).json({
+      success: true,
+      message: 'No avatar to remove',
+      data: { removed: false },
+    });
+  }
+
+  await User.updateOne(
+    { _id: req.user._id },
+    { $set: { avatarUrl: '', avatarPublicId: '' } },
+  );
+
+  if (previousPublicId) {
+    safeDestroy(previousPublicId);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Avatar removed',
+    data: { removed: true },
+  });
+});
+
 // POST /api/upload/message-image
 export const uploadMessageImageController = asyncHandler(async (req, res) => {
   if (!req.file?.buffer) {
