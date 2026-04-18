@@ -31,12 +31,16 @@ const swaggerDefinition = {
   },
   servers: [
     {
-      url: 'http://localhost:5000',
-      description: 'Local development',
+      url: 'https://chat-app-mern-dm8x.onrender.com',
+      description: 'Production (Render)',
     },
     {
       url: '/',
       description: 'Current host',
+    },
+    {
+      url: 'http://localhost:5000',
+      description: 'Local development',
     },
   ],
   tags: [

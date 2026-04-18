@@ -27,7 +27,10 @@ A production-grade real-time chat platform built on the **MERN** stack (MongoDB,
 
 ## Live Demo
 
-[🚀 View Live Demo](https://chat-app-mernn.netlify.app/)
+- **Frontend:** [https://chat-app-mernn.netlify.app/](https://chat-app-mernn.netlify.app/)
+- **Backend API:** [https://chat-app-mern-dm8x.onrender.com/](https://chat-app-mern-dm8x.onrender.com/)
+- **API Documentation (Swagger UI):** [https://chat-app-mern-dm8x.onrender.com/api-docs](https://chat-app-mern-dm8x.onrender.com/api-docs)
+- **Health Check:** [https://chat-app-mern-dm8x.onrender.com/api/health](https://chat-app-mern-dm8x.onrender.com/api/health)
 
 > The backend is deployed on Render and the frontend on Netlify. Cold starts on the free tier may take a few seconds.
 
