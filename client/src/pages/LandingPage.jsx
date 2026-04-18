@@ -12,6 +12,7 @@ import {
 
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Spinner from '../components/common/Spinner.jsx';
+import Footer from '../components/common/Footer.jsx';
 import { ROUTES } from '../utils/constants.js';
 
 /**
@@ -377,6 +378,8 @@ const LandingPage = () => {
             </Link>
           </nav>
         </div>
+
+        <Footer className="border-0 border-t border-gray-200 dark:border-gray-800" />
       </footer>
     </div>
   );
