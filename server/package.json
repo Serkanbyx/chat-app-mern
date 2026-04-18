@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Chat App backend — Express 5, MongoDB, Socket.io, JWT, Cloudinary",
+  "author": {
+    "name": "Serkanby",
+    "url": "https://serkanbayraktar.com/"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -29,7 +34,9 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "socket.io": "^4.8.3",
-    "streamifier": "^0.1.1"
+    "streamifier": "^0.1.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "eslint": "^9.39.1",

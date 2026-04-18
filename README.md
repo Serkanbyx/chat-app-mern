@@ -167,7 +167,7 @@ cd server && npm run dev
 cd client && npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser. The API health probe is available at [http://localhost:5000/api/health](http://localhost:5000/api/health).
+Open [http://localhost:5173](http://localhost:5173) in your browser. The interactive **API documentation** is available at [http://localhost:5000/api-docs](http://localhost:5000/api-docs) and the health probe at [http://localhost:5000/api/health](http://localhost:5000/api/health).
 
 > Generate a strong `JWT_SECRET` with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
@@ -243,6 +243,8 @@ app.use('/api/admin', protect, adminOnly, adminLimiter, adminRoutes);
 ## API Endpoints
 
 > Base URL: `${VITE_API_URL}` (e.g. `http://localhost:5000/api` in development). All authenticated routes require an `Authorization: Bearer <jwt>` header.
+>
+> 📖 Full interactive **OpenAPI / Swagger** documentation is available at `/api-docs` (e.g. [http://localhost:5000/api-docs](http://localhost:5000/api-docs)) and the raw spec at `/api-docs.json`.
 
 ### Health
 
