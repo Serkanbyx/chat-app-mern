@@ -97,7 +97,7 @@ const UserRow = ({
       </td>
 
       <td className="hidden px-3 py-3 text-xs text-gray-600 sm:table-cell dark:text-gray-300">
-        <span className="block max-w-[14rem] truncate">{user.email || '—'}</span>
+        <span className="block max-w-56 truncate">{user.email || '—'}</span>
       </td>
 
       <td className="px-3 py-3">

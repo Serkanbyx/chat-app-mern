@@ -92,7 +92,7 @@ const ReportRow = ({ report, onSelect, compact = false }) => {
           {REASON_LABEL[report.reason] ?? report.reason}
         </span>
         {report.description && !compact ? (
-          <span className="mt-0.5 block max-w-[28rem] truncate text-xs text-gray-500 dark:text-gray-400">
+          <span className="mt-0.5 block max-w-md truncate text-xs text-gray-500 dark:text-gray-400">
             {report.description}
           </span>
         ) : null}

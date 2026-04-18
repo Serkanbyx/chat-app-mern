@@ -17,7 +17,7 @@ import Footer from '../components/common/Footer.jsx';
  */
 const AuthLayout = () => {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-brand-50 via-white to-brand-100 px-4 py-10 dark:from-gray-950 dark:via-gray-950 dark:to-brand-950/40">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-linear-to-br from-brand-50 via-white to-brand-100 px-4 py-10 dark:from-gray-950 dark:via-gray-950 dark:to-brand-950/40">
       {/* Decorative orbs — purely visual, hidden from AT */}
       <div
         aria-hidden="true"
