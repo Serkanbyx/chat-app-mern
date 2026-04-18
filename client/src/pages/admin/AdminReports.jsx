@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Flag,
   RefreshCw,
 } from 'lucide-react';
@@ -619,6 +620,34 @@ const ReporterChip = ({ user }) => {
   );
 };
 
+/**
+ * `auditHref` derives the deep-link admins use to jump into the audit
+ * window for the reported message/conversation. We keep the logic local
+ * to the preview because only this component knows the `target` shape
+ * for each `targetType` — pushing it up to the modal would force the
+ * caller to re-discriminate on type.
+ */
+const auditHrefForTarget = (type, target) => {
+  if (!target) return null;
+  if (type === 'message' && target.conversationId) {
+    return `/admin/messages?id=${target.conversationId}`;
+  }
+  if (type === 'conversation' && target._id) {
+    return `/admin/messages?id=${target._id}`;
+  }
+  return null;
+};
+
+const AuditLink = ({ href, label }) => (
+  <Link
+    to={href}
+    className="inline-flex items-center gap-1 self-start rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 dark:border-brand-900/60 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/40"
+  >
+    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+    <span>{label}</span>
+  </Link>
+);
+
 const TargetPreview = ({ type, target }) => {
   if (!target) {
     return (
@@ -661,6 +690,7 @@ const TargetPreview = ({ type, target }) => {
   }
 
   if (type === 'message') {
+    const auditHref = auditHrefForTarget(type, target);
     return (
       <div className="space-y-2 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800">
         {target.sender ? (
@@ -696,12 +726,16 @@ const TargetPreview = ({ type, target }) => {
             Message content has been removed.
           </p>
         ) : null}
+        {auditHref ? (
+          <AuditLink href={auditHref} label="Open conversation in audit" />
+        ) : null}
       </div>
     );
   }
 
   if (type === 'conversation') {
     const participants = target.participants ?? [];
+    const auditHref = auditHrefForTarget(type, target);
     return (
       <div className="rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800">
         <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -728,6 +762,11 @@ const TargetPreview = ({ type, target }) => {
               </li>
             ) : null}
           </ul>
+        ) : null}
+        {auditHref ? (
+          <div className="mt-3">
+            <AuditLink href={auditHref} label="Open in audit" />
+          </div>
         ) : null}
       </div>
     );

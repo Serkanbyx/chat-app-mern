@@ -79,6 +79,7 @@ const Navbar = () => {
   };
 
   return (
+    <>
     <header className="sticky top-0 z-30 w-full border-b border-gray-200 bg-white/80 backdrop-blur dark:border-gray-800 dark:bg-gray-950/80">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         {/* Brand */}
@@ -190,16 +191,24 @@ const Navbar = () => {
           </button>
         </div>
       </div>
+    </header>
 
-      {/* Mobile drawer */}
-      {drawerOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
-          <div
-            className="absolute inset-0 bg-gray-900/60"
-            onClick={() => setDrawerOpen(false)}
-            aria-hidden="true"
-          />
-          <aside className="absolute top-0 right-0 flex h-full w-72 max-w-[85%] flex-col bg-white shadow-xl dark:bg-gray-900">
+    {/* Mobile drawer — rendered OUTSIDE the sticky header so its
+     * z-index isn't trapped in the header's stacking context. Without
+     * this, sibling layouts (e.g. AdminLayout's mobile tab nav) bleed
+     * through the drawer panel. */}
+    {drawerOpen ? (
+      <div
+        className="fixed inset-0 z-50 md:hidden"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div
+          className="absolute inset-0 bg-gray-950/70 backdrop-blur-sm"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+        <aside className="absolute top-0 right-0 flex h-full w-72 max-w-[85%] flex-col bg-white shadow-xl dark:bg-gray-900">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 Menu
@@ -264,7 +273,7 @@ const Navbar = () => {
           </aside>
         </div>
       ) : null}
-    </header>
+    </>
   );
 };
 

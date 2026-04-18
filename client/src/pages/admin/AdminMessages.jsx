@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -43,9 +44,16 @@ import { formatRelativeTime } from '../../utils/formatRelativeTime.js';
  *   - Optimistically marks the row as `deletedFor: 'everyone'` and
  *     clears its `text` / `imageUrl` so the redaction renders without
  *     waiting for a refetch.
+ *
+ * Deep-link:
+ *   - `?id=<conversationId>` auto-loads the conversation. Other admin
+ *     surfaces (reports modal, dashboard) link to this URL so a refresh
+ *     never loses the audit context, and direct sharing of the URL
+ *     between moderators is safe (every read still hits the audit log).
  */
 
 const PAGE_SIZE = 30;
+const CONVERSATION_ID_RE = /^[a-f0-9]{24}$/i;
 
 const initialState = {
   loading: false,
@@ -58,13 +66,50 @@ const initialState = {
 };
 
 const AdminMessages = () => {
-  const [conversationIdInput, setConversationIdInput] = useState('');
-  const [activeConversationId, setActiveConversationId] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialId = searchParams.get('id') ?? '';
+
+  const [conversationIdInput, setConversationIdInput] = useState(initialId);
+  const [activeConversationId, setActiveConversationId] = useState(
+    CONVERSATION_ID_RE.test(initialId) ? initialId : '',
+  );
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState('');
   const [state, setState] = useState(initialState);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [confirm, setConfirm] = useState(null);
+
+  /* Keep the URL in sync with the active conversation so a refresh
+   * preserves context and the URL can be shared between moderators. */
+  useEffect(() => {
+    const current = searchParams.get('id') ?? '';
+    if (activeConversationId === current) return;
+    const next = new URLSearchParams(searchParams);
+    if (activeConversationId) {
+      next.set('id', activeConversationId);
+    } else {
+      next.delete('id');
+    }
+    setSearchParams(next, { replace: true });
+  }, [activeConversationId, searchParams, setSearchParams]);
+
+  /* React to external URL changes (e.g. a moderator clicks an
+   * "Audit conversation" link inside the reports modal). */
+  useEffect(() => {
+    const urlId = searchParams.get('id') ?? '';
+    if (urlId === activeConversationId) return;
+    if (CONVERSATION_ID_RE.test(urlId)) {
+      setConversationIdInput(urlId);
+      setFilter('');
+      setPage(1);
+      setActiveConversationId(urlId);
+    } else if (!urlId && activeConversationId) {
+      setConversationIdInput('');
+      setActiveConversationId('');
+      setState(initialState);
+    }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [searchParams]);
 
   const fetchPage = useCallback(async (conversationId, nextPage) => {
     if (!conversationId) return;
@@ -102,6 +147,10 @@ const AdminMessages = () => {
     event.preventDefault();
     const trimmed = conversationIdInput.trim();
     if (!trimmed) return;
+    if (!CONVERSATION_ID_RE.test(trimmed)) {
+      toast.error('Conversation id must be 24 hexadecimal characters.');
+      return;
+    }
     setFilter('');
     setPage(1);
     setActiveConversationId(trimmed);
@@ -235,7 +284,10 @@ const AdminMessages = () => {
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            disabled={!conversationIdInput.trim() || state.loading}
+            disabled={
+              !CONVERSATION_ID_RE.test(conversationIdInput.trim()) ||
+              state.loading
+            }
             className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Search className="h-4 w-4" aria-hidden="true" />
