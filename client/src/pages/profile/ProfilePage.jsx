@@ -222,14 +222,14 @@ const ProfilePage = () => {
     <>
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          {/* Banner — taller so the overlapping avatar reads as inside the
-           * banner rather than dangling below it. */}
-          <div className="h-32 bg-linear-to-r from-brand-500 via-brand-600 to-brand-700 sm:h-44 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900" />
-
-          <div className="relative px-5 pb-6 sm:px-8 sm:pb-8">
-            {/* Top row: avatar (overlaps banner) + action buttons (top-right). */}
-            <div className="-mt-12 flex items-start justify-between gap-3 sm:-mt-16">
-              <div className="rounded-full ring-4 ring-white dark:ring-gray-900">
+          {/* Banner — hosts the avatar + identity overlay. Height is sized
+           * so avatar (h-20) plus the surrounding ring fits comfortably
+           * inside without spilling past the bottom edge. */}
+          <div className="relative h-40 bg-linear-to-r from-brand-500 via-brand-600 to-brand-700 sm:h-48 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900">
+            <div className="absolute inset-x-5 bottom-4 flex items-center gap-4 sm:inset-x-8 sm:bottom-5">
+              {/* Translucent ring tint blends into the gradient instead of
+               * punching a hard white halo through it. */}
+              <div className="rounded-full ring-4 ring-white/40 dark:ring-white/20">
                 <Avatar
                   src={targetUser.avatarUrl}
                   name={targetUser.displayName || targetUser.username}
@@ -238,71 +238,72 @@ const ProfilePage = () => {
                   showStatus={!isSelf}
                 />
               </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 sm:pt-4">
-                {isSelf ? (
-                  <Link
-                    to="/settings/profile"
-                    className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-                  >
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                    <span>Edit profile</span>
-                  </Link>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleSendMessage}
-                      disabled={actionInFlight || isBlockedByMe}
-                      className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                      <span>Send message</span>
-                    </button>
-
-                    {isBlockedByMe ? (
-                      <button
-                        type="button"
-                        onClick={handleUnblock}
-                        disabled={actionInFlight}
-                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                      >
-                        <UserCheck className="h-4 w-4" aria-hidden="true" />
-                        <span>Unblock</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setBlockModalOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                      >
-                        <UserX className="h-4 w-4" aria-hidden="true" />
-                        <span>Block</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => setReportModalOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-gray-700 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
-                    >
-                      <Flag className="h-4 w-4" aria-hidden="true" />
-                      <span>Report</span>
-                    </button>
-                  </>
-                )}
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-semibold text-white drop-shadow-sm sm:text-2xl">
+                  {targetUser.displayName || targetUser.username}
+                </h1>
+                <p className="truncate text-sm text-white/80">
+                  @{targetUser.username}
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* Identity block — Twitter/GitHub-style: name sits below the
-             * avatar instead of beside it, giving each piece room to breathe. */}
-            <div className="mt-3 min-w-0">
-              <h1 className="truncate text-xl font-semibold text-gray-900 sm:text-2xl dark:text-white">
-                {targetUser.displayName || targetUser.username}
-              </h1>
-              <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-                @{targetUser.username}
-              </p>
+          {/* Dark content body — actions sit directly below the banner,
+           * bio + meta follow underneath. */}
+          <div className="px-5 pt-4 pb-6 sm:px-8 sm:pt-5 sm:pb-8">
+            <div className="flex flex-wrap items-center gap-2">
+              {isSelf ? (
+                <Link
+                  to="/settings/profile"
+                  className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  <span>Edit profile</span>
+                </Link>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSendMessage}
+                    disabled={actionInFlight || isBlockedByMe}
+                    className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                    <span>Send message</span>
+                  </button>
+
+                  {isBlockedByMe ? (
+                    <button
+                      type="button"
+                      onClick={handleUnblock}
+                      disabled={actionInFlight}
+                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      <UserCheck className="h-4 w-4" aria-hidden="true" />
+                      <span>Unblock</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setBlockModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      <UserX className="h-4 w-4" aria-hidden="true" />
+                      <span>Block</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-gray-700 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                  >
+                    <Flag className="h-4 w-4" aria-hidden="true" />
+                    <span>Report</span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Bio + meta */}
