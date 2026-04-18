@@ -1,6 +1,8 @@
 import { Link, Outlet } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 
+import Footer from '../components/common/Footer.jsx';
+
 /**
  * AuthLayout — chrome-less, centered shell for sign-in / sign-up.
  *
@@ -42,10 +44,9 @@ const AuthLayout = () => {
         <div className="rounded-2xl border border-gray-200 bg-white/90 p-6 shadow-xl backdrop-blur sm:p-8 dark:border-gray-800 dark:bg-gray-900/80">
           <Outlet />
         </div>
-        <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">
-          &copy; {new Date().getFullYear()} Chat App
-        </p>
       </main>
+
+      <Footer className="relative z-10 mt-6 border-0 bg-transparent backdrop-blur-0 dark:bg-transparent" />
     </div>
   );
 };

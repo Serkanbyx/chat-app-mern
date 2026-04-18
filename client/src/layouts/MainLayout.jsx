@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import Navbar from '../components/layout/Navbar.jsx';
+import Footer from '../components/common/Footer.jsx';
 
 /**
  * MainLayout — generic authenticated shell used by everything except
@@ -23,6 +24,7 @@ const MainLayout = () => {
       <main className="flex-1">
         <Outlet />
       </main>
+      <Footer />
     </div>
   );
 };
