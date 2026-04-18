@@ -457,7 +457,7 @@ const MessageAuditRow = ({ message, pending, onForceDelete }) => {
         ) : (
           <>
             {message.text ? (
-              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-200">
+              <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-gray-700 dark:text-gray-200">
                 {message.text}
               </p>
             ) : null}

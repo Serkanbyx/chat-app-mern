@@ -222,33 +222,24 @@ const ProfilePage = () => {
     <>
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          {/* Banner */}
-          <div className="h-24 bg-linear-to-r from-brand-500 via-brand-600 to-brand-700 sm:h-32 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900" />
+          {/* Banner — taller so the overlapping avatar reads as inside the
+           * banner rather than dangling below it. */}
+          <div className="h-32 bg-linear-to-r from-brand-500 via-brand-600 to-brand-700 sm:h-44 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900" />
 
           <div className="relative px-5 pb-6 sm:px-8 sm:pb-8">
-            <div className="-mt-10 flex flex-col items-start gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="rounded-full ring-4 ring-white dark:ring-gray-900">
-                  <Avatar
-                    src={targetUser.avatarUrl}
-                    name={targetUser.displayName || targetUser.username}
-                    size="xl"
-                    online={isOnline}
-                    showStatus={!isSelf}
-                  />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="truncate text-xl font-semibold text-gray-900 sm:text-2xl dark:text-white">
-                    {targetUser.displayName || targetUser.username}
-                  </h1>
-                  <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-                    @{targetUser.username}
-                  </p>
-                </div>
+            {/* Top row: avatar (overlaps banner) + action buttons (top-right). */}
+            <div className="-mt-12 flex items-start justify-between gap-3 sm:-mt-16">
+              <div className="rounded-full ring-4 ring-white dark:ring-gray-900">
+                <Avatar
+                  src={targetUser.avatarUrl}
+                  name={targetUser.displayName || targetUser.username}
+                  size="xl"
+                  online={isOnline}
+                  showStatus={!isSelf}
+                />
               </div>
 
-              {/* Action cluster */}
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 sm:pt-4">
                 {isSelf ? (
                   <Link
                     to="/settings/profile"
@@ -303,8 +294,19 @@ const ProfilePage = () => {
               </div>
             </div>
 
+            {/* Identity block — Twitter/GitHub-style: name sits below the
+             * avatar instead of beside it, giving each piece room to breathe. */}
+            <div className="mt-3 min-w-0">
+              <h1 className="truncate text-xl font-semibold text-gray-900 sm:text-2xl dark:text-white">
+                {targetUser.displayName || targetUser.username}
+              </h1>
+              <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+                @{targetUser.username}
+              </p>
+            </div>
+
             {/* Bio + meta */}
-            <div className="mt-6 space-y-4">
+            <div className="mt-5 space-y-4">
               {targetUser.bio ? (
                 <p className="text-sm whitespace-pre-line text-gray-700 dark:text-gray-200">
                   {targetUser.bio}
