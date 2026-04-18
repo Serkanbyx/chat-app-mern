@@ -228,7 +228,7 @@ const ProfilePage = () => {
           <div className="relative px-5 pb-6 sm:px-8 sm:pb-8">
             <div className="-mt-12 flex flex-col items-start gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-3">
-                <div className="ring-4 ring-white dark:ring-gray-900">
+                <div className="rounded-full ring-4 ring-white dark:ring-gray-900">
                   <Avatar
                     src={targetUser.avatarUrl}
                     name={targetUser.displayName || targetUser.username}
