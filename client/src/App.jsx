@@ -33,12 +33,16 @@ import AdminReports from './pages/admin/AdminReports.jsx';
 import AdminUserDetail from './pages/admin/AdminUserDetail.jsx';
 import AdminUsers from './pages/admin/AdminUsers.jsx';
 
+import LandingPage from './pages/LandingPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
 /**
  * App — single source of truth for the URL space.
  *
  * Tree shape mirrors the Step 22 spec exactly:
+ *
+ *   Public:
+ *     /                             → LandingPage (auto-redirects authed users to /chat)
  *
  *   Public (guest-only):
  *     /login, /register             → AuthLayout
@@ -66,7 +70,7 @@ import NotFoundPage from './pages/NotFoundPage.jsx';
 const App = () => {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/chat" replace />} />
+      <Route path="/" element={<LandingPage />} />
 
       <Route element={<GuestOnlyRoute />}>
         <Route element={<AuthLayout />}>

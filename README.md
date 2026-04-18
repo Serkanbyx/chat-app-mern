@@ -31,16 +31,26 @@
 
 ## Screenshots
 
-| Chat list                              | Conversation                              |
-| -------------------------------------- | ----------------------------------------- |
-| ![Chat list](./docs/screenshots/chat-list.png) | ![Conversation](./docs/screenshots/conversation.png) |
+> Captured live from the production deployment with a freshly registered demo
+> account. No real user data, tokens, or admin credentials are exposed.
 
-| Group settings                                       | Admin dashboard                                  |
-| ---------------------------------------------------- | ------------------------------------------------ |
-| ![Group settings](./docs/screenshots/group-settings.png) | ![Admin dashboard](./docs/screenshots/admin.png) |
+### Authentication
 
-> Drop PNG/WebP captures into `docs/screenshots/` to enable the previews above.
-> Captures must **not** include real user data, real tokens, or admin credentials.
+| Sign in                                          | Register                                            |
+| ------------------------------------------------ | --------------------------------------------------- |
+| ![Login page](./docs/screenshots/login.png)      | ![Register page](./docs/screenshots/register.png)   |
+
+### Chat surface (dark + light themes)
+
+| Dark theme                                            | Light theme                                            |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| ![Chat list dark](./docs/screenshots/chat-list.png)   | ![Chat list light](./docs/screenshots/chat-light.png)  |
+
+### Settings
+
+| Profile settings                                              | Appearance settings                                                    |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| ![Profile settings](./docs/screenshots/settings-profile.png)  | ![Appearance settings](./docs/screenshots/settings-appearance.png)     |
 
 ---
 
