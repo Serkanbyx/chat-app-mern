@@ -170,7 +170,7 @@ cd server && npm run dev
 cd client && npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser. The interactive **API documentation** is available at [http://localhost:5000/api-docs](http://localhost:5000/api-docs) and the health probe at [http://localhost:5000/api/health](http://localhost:5000/api/health).
+Open [http://localhost:5173](http://localhost:5173) in your browser. The interactive **API documentation** is available locally at [http://localhost:5000/api-docs](http://localhost:5000/api-docs) and the health probe at [http://localhost:5000/api/health](http://localhost:5000/api/health). The live deployment is served at [https://chat-app-mern-dm8x.onrender.com/api-docs](https://chat-app-mern-dm8x.onrender.com/api-docs).
 
 > Generate a strong `JWT_SECRET` with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
@@ -245,9 +245,11 @@ app.use('/api/admin', protect, adminOnly, adminLimiter, adminRoutes);
 
 ## API Endpoints
 
-> Base URL: `${VITE_API_URL}` (e.g. `http://localhost:5000/api` in development). All authenticated routes require an `Authorization: Bearer <jwt>` header.
+> Base URL: `${VITE_API_URL}` — `https://chat-app-mern-dm8x.onrender.com/api` in production or `http://localhost:5000/api` in development. All authenticated routes require an `Authorization: Bearer <jwt>` header.
 >
-> 📖 Full interactive **OpenAPI / Swagger** documentation is available at `/api-docs` (e.g. [http://localhost:5000/api-docs](http://localhost:5000/api-docs)) and the raw spec at `/api-docs.json`.
+> 📖 Full interactive **OpenAPI / Swagger** documentation:
+> - Production: [https://chat-app-mern-dm8x.onrender.com/api-docs](https://chat-app-mern-dm8x.onrender.com/api-docs)
+> - Raw spec: [https://chat-app-mern-dm8x.onrender.com/api-docs.json](https://chat-app-mern-dm8x.onrender.com/api-docs.json)
 
 ### Health
 
@@ -512,10 +514,10 @@ chat-app-mern/
 
 | Variable          | Value                                              |
 | ----------------- | -------------------------------------------------- |
-| `VITE_API_URL`    | `https://<your-render-service>.onrender.com/api`   |
-| `VITE_SOCKET_URL` | `https://<your-render-service>.onrender.com`       |
+| `VITE_API_URL`    | `https://chat-app-mern-dm8x.onrender.com/api`      |
+| `VITE_SOCKET_URL` | `https://chat-app-mern-dm8x.onrender.com`          |
 
-> WebSocket support is enabled on Render's web services by default. After deployment, verify the live site at [https://chat-app-mernn.netlify.app/](https://chat-app-mernn.netlify.app/) and the API health probe at `https://<your-render-service>.onrender.com/api/health`.
+> WebSocket support is enabled on Render's web services by default. The live site is at [https://chat-app-mernn.netlify.app/](https://chat-app-mernn.netlify.app/), the API documentation at [https://chat-app-mern-dm8x.onrender.com/api-docs](https://chat-app-mern-dm8x.onrender.com/api-docs), and the health probe at [https://chat-app-mern-dm8x.onrender.com/api/health](https://chat-app-mern-dm8x.onrender.com/api/health).
 
 ---
 

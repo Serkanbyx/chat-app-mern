@@ -35,12 +35,12 @@ const swaggerDefinition = {
       description: 'Production (Render)',
     },
     {
-      url: '/',
-      description: 'Current host',
-    },
-    {
       url: 'http://localhost:5000',
       description: 'Local development',
+    },
+    {
+      url: '/',
+      description: 'Current host',
     },
   ],
   tags: [
