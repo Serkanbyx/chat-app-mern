@@ -12,6 +12,9 @@ import ChatHeader from '../../components/chat/ChatHeader.jsx';
 import GroupSettingsModal from '../../components/chat/GroupSettingsModal.jsx';
 import MessageComposer from '../../components/chat/MessageComposer.jsx';
 import MessagesList from '../../components/chat/MessagesList.jsx';
+import SearchInChatBar, {
+  collectMatches,
+} from '../../components/chat/SearchInChatBar.jsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useChatState } from '../../contexts/ChatStateContext.jsx';
 import { useNotifications } from '../../contexts/NotificationContext.jsx';
@@ -87,6 +90,13 @@ const ChatPage = () => {
    * trigger. */
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
 
+  /* Search-in-conversation state. Lives here (not in the bar) because
+   * the matches feed back into `MessagesList` via `highlightMessageId`,
+   * and we want a single source of truth for which match is "current". */
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+
   const listRef = useRef(null);
 
   /* Refs let socket handlers (registered once per socket+conv pair) read
@@ -108,6 +118,9 @@ const ChatPage = () => {
     setIsLoadingOlder(false);
     setReplyTo(null);
     setIsGroupSettingsOpen(false);
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSearchIndex(0);
   }, [conversationId]);
 
   /* ---------- Initial fetch (conversation + first page) ----------
@@ -724,6 +737,68 @@ const ChatPage = () => {
     }
   }, [conversationId, hasMore, isLoadingOlder]);
 
+  /* ---------- Search-in-conversation wiring ----------
+   * Matches are recomputed locally whenever messages or the query
+   * change. We deliberately keep this client-side: the affordance
+   * scans only what's already on screen, which keeps results aligned
+   * with what the user can actually see (no "match in an unloaded
+   * older page" confusion). */
+  const searchMatchIds = useMemo(
+    () => collectMatches(messages, searchQuery),
+    [messages, searchQuery],
+  );
+
+  /* Clamp the active index so a shrinking match list (because the user
+   * typed more characters or messages were deleted) never points past
+   * the end. We use an effect, not a memo, because the value is owned
+   * by `searchIndex` state — collapsing this into a derived value would
+   * lose the "user manually clicked next" intent. */
+  useEffect(() => {
+    if (searchMatchIds.length === 0) {
+      if (searchIndex !== 0) setSearchIndex(0);
+      return;
+    }
+    if (searchIndex >= searchMatchIds.length) {
+      setSearchIndex(0);
+    }
+  }, [searchMatchIds, searchIndex]);
+
+  const highlightMessageId = useMemo(() => {
+    if (!isSearchOpen || searchMatchIds.length === 0) return null;
+    return searchMatchIds[Math.min(searchIndex, searchMatchIds.length - 1)] ?? null;
+  }, [isSearchOpen, searchIndex, searchMatchIds]);
+
+  const handleOpenSearch = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSearchIndex(0);
+  }, []);
+
+  const handleSearchQueryChange = useCallback((next) => {
+    setSearchQuery(next);
+    // Reset to the FIRST match on every keystroke so the user always
+    // sees the top-most hit before navigating with ↑/↓.
+    setSearchIndex(0);
+  }, []);
+
+  const handleSearchNext = useCallback(() => {
+    setSearchIndex((prev) => {
+      if (searchMatchIds.length === 0) return 0;
+      return (prev + 1) % searchMatchIds.length;
+    });
+  }, [searchMatchIds.length]);
+
+  const handleSearchPrev = useCallback(() => {
+    setSearchIndex((prev) => {
+      if (searchMatchIds.length === 0) return 0;
+      return (prev - 1 + searchMatchIds.length) % searchMatchIds.length;
+    });
+  }, [searchMatchIds.length]);
+
   /* ---------- Typing users for THIS conversation ---------- */
   const typingUsers = useMemo(() => {
     if (!conversationId) return [];
@@ -765,7 +840,19 @@ const ChatPage = () => {
       <ChatHeader
         conversation={conversation}
         isLoading={isLoadingInitial}
+        onOpenSearch={handleOpenSearch}
         onOpenGroupSettings={handleOpenGroupSettings}
+      />
+
+      <SearchInChatBar
+        open={isSearchOpen}
+        query={searchQuery}
+        onQueryChange={handleSearchQueryChange}
+        matchCount={searchMatchIds.length}
+        currentIndex={searchIndex}
+        onNext={handleSearchNext}
+        onPrev={handleSearchPrev}
+        onClose={handleCloseSearch}
       />
 
       <MessagesList
@@ -781,6 +868,7 @@ const ChatPage = () => {
         onLoadOlder={handleLoadOlder}
         typingUsers={typingUsers}
         showReadReceipts={preferences?.showReadReceipts !== false}
+        highlightMessageId={highlightMessageId}
         onReply={handleReplyToMessage}
         onEdit={handleEditMessage}
         onDelete={handleDeleteMessage}

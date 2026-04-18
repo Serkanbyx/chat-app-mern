@@ -89,6 +89,19 @@ const RegisterPage = () => {
   const { register } = useAuth();
   const location = useLocation();
 
+  const redirectHint = useMemo(() => {
+    // Honour the same `state.from` deep-link hint that LoginPage uses
+    // so a user who lands on /register from a guarded URL ends up back
+    // on that URL after their first sign-up. Guards against bouncing
+    // through an auth route (which would re-trigger the `from` chain).
+    const from = location.state?.from;
+    if (!from || typeof from !== 'string') return null;
+    if (from.startsWith(ROUTES.LOGIN) || from.startsWith(ROUTES.REGISTER)) {
+      return null;
+    }
+    return from;
+  }, [location.state]);
+
   const usernameId = useId();
   const displayNameId = useId();
   const emailId = useId();
@@ -198,12 +211,15 @@ const RegisterPage = () => {
     setFieldErrors({});
     setFormError('');
     try {
-      await register({
-        username: form.username.trim(),
-        displayName: form.displayName.trim(),
-        email: form.email.trim(),
-        password: form.password,
-      });
+      await register(
+        {
+          username: form.username.trim(),
+          displayName: form.displayName.trim(),
+          email: form.email.trim(),
+          password: form.password,
+        },
+        { redirectTo: redirectHint || undefined },
+      );
       toast.success(`Welcome, ${form.displayName.trim()}!`);
     } catch (error) {
       const status = error?.response?.status;

@@ -127,6 +127,7 @@ const MessagesList = forwardRef(
       onLoadOlder,
       typingUsers = [],
       showReadReceipts = true,
+      highlightMessageId = null,
       onReply,
       onEdit,
       onDelete,
@@ -138,6 +139,21 @@ const MessagesList = forwardRef(
     const containerRef = useRef(null);
     const isFirstRenderRef = useRef(true);
     const previousLastIdRef = useRef(null);
+    /* `bubbleRefsMapRef` lets the search-in-chat highlighter scroll a
+     * specific message into view without forcing every bubble through
+     * a new prop just to expose its DOM node. We register/unregister
+     * via a callback ref attached to each `<li>` below. */
+    const bubbleRefsMapRef = useRef(new Map());
+
+    const setBubbleRef = useCallback((messageId, node) => {
+      const map = bubbleRefsMapRef.current;
+      if (!messageId) return;
+      if (node) {
+        map.set(messageId, node);
+      } else {
+        map.delete(messageId);
+      }
+    }, []);
 
     /* `pendingNewCount` is non-zero only when a new message arrived
      * while the user was scrolled away from the bottom. Cleared the
@@ -239,6 +255,19 @@ const MessagesList = forwardRef(
       previousLastIdRef.current = null;
       setPendingNewCount(0);
     }, []);
+
+    /* ---------- Highlighted message scroll-into-view ----------
+     * Whenever the parent (ChatPage) flips `highlightMessageId` (e.g. via
+     * the search bar's Next/Prev), we ask the corresponding bubble to
+     * centre itself in the viewport. The bubble is responsible for the
+     * visual flash via its `isHighlighted` prop — this hook only owns
+     * the scroll, which keeps both responsibilities in one place. */
+    useEffect(() => {
+      if (!highlightMessageId) return;
+      const node = bubbleRefsMapRef.current.get(String(highlightMessageId));
+      if (!node) return;
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [highlightMessageId]);
 
     /* ---------- Imperative API for parent ---------- */
     useImperativeHandle(
@@ -347,11 +376,13 @@ const MessagesList = forwardRef(
                   ) : null}
 
                   <li
+                    ref={(node) => setBubbleRef(message._id, node)}
                     className={clsx(
                       // Tighten spacing inside a same-sender run so the
                       // bubbles read as a visual group.
                       isGroupStart ? 'mt-1.5' : 'mt-0.5',
                       isGroupEnd ? 'mb-1' : 'mb-0',
+                      'scroll-mt-4 scroll-mb-4',
                     )}
                   >
                     <MessageBubble
@@ -364,6 +395,10 @@ const MessagesList = forwardRef(
                       showName={!isOwn && isGroupStart}
                       tickStatus={tickStatus}
                       tickTooltip={tickTooltip}
+                      isHighlighted={
+                        highlightMessageId &&
+                        String(message._id) === String(highlightMessageId)
+                      }
                       onReply={onReply}
                       onEdit={onEdit}
                       onDelete={onDelete}

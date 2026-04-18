@@ -66,9 +66,14 @@ export const AuthProvider = ({ children }) => {
    * Apply a successful login/register response: persist the token,
    * populate user state, and route into the app. Pulled out as a helper
    * so `login` and `register` cannot drift apart.
+   *
+   * `redirectTo` lets the caller deep-link the user back to the page
+   * they were trying to reach when `ProtectedRoute` bounced them to
+   * `/login`. Falls back to `ROUTES.CHAT` so the standard sign-in flow
+   * is unchanged.
    */
   const applyAuthResult = useCallback(
-    (result, { redirect = true } = {}) => {
+    (result, { redirect = true, redirectTo } = {}) => {
       const nextToken = result?.data?.token ?? result?.token ?? null;
       const nextUser = result?.data?.user ?? result?.user ?? null;
       if (!nextToken || !nextUser) {
@@ -78,7 +83,7 @@ export const AuthProvider = ({ children }) => {
       setToken(nextToken);
       setUser(nextUser);
       if (redirect) {
-        navigate(ROUTES.CHAT, { replace: true });
+        navigate(redirectTo || ROUTES.CHAT, { replace: true });
       }
     },
     [navigate],
@@ -87,18 +92,18 @@ export const AuthProvider = ({ children }) => {
   /* ---------- Imperative actions ---------- */
 
   const login = useCallback(
-    async (email, password) => {
+    async (email, password, options = {}) => {
       const result = await authService.login({ email, password });
-      applyAuthResult(result);
+      applyAuthResult(result, options);
       return result;
     },
     [applyAuthResult],
   );
 
   const register = useCallback(
-    async (payload) => {
+    async (payload, options = {}) => {
       const result = await authService.register(payload);
-      applyAuthResult(result);
+      applyAuthResult(result, options);
       return result;
     },
     [applyAuthResult],

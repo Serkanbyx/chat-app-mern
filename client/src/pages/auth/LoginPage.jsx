@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, LogIn, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -34,7 +34,6 @@ const GENERIC_AUTH_ERROR = 'Invalid email or password';
 const LoginPage = () => {
   const { login } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const emailId = useId();
   const passwordId = useId();
   const formErrorId = useId();
@@ -84,15 +83,13 @@ const LoginPage = () => {
     setFieldErrors({});
     setFormError('');
     try {
-      await login(email.trim(), password);
+      // Forward the deep-link target into AuthContext so the post-auth
+      // navigation lands on the requested page in a single push instead
+      // of bouncing through `/chat` first (which was visible as a
+      // mid-load flash). `redirectHint` is already validated by the
+      // memo above so we can pass it through verbatim.
+      await login(email.trim(), password, { redirectTo: redirectHint || undefined });
       toast.success('Welcome back!');
-      // AuthContext.applyAuthResult navigates to /chat by default; if
-      // the user originally requested a different protected page, push
-      // them there instead. `replace` keeps the login page out of
-      // history so Back doesn't return to a now-redundant form.
-      if (redirectHint) {
-        navigate(redirectHint, { replace: true });
-      }
     } catch (error) {
       const status = error?.response?.status;
       const data = error?.response?.data;

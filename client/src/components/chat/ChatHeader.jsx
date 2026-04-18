@@ -231,6 +231,62 @@ const ChatHeader = ({
     if (isGroup && onOpenGroupSettings) onOpenGroupSettings();
   }, [isGroup, onOpenGroupSettings]);
 
+  /* Header acts as a button for groups (opens settings panel) and as a
+   * link to the peer's profile for direct chats. We compute the
+   * destination once so the JSX below stays a single shared block. */
+  const peerProfileTo = useMemo(() => {
+    if (isGroup) return null;
+    const username = otherParticipant?.username;
+    return username ? `/u/${encodeURIComponent(username)}` : null;
+  }, [isGroup, otherParticipant?.username]);
+
+  const headerInteractive = isGroup
+    ? Boolean(onOpenGroupSettings)
+    : Boolean(peerProfileTo);
+
+  const headerSharedClass = clsx(
+    'flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 text-left transition-colors',
+    headerInteractive
+      ? 'cursor-pointer hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-gray-800 dark:focus-visible:bg-gray-800'
+      : 'cursor-default',
+  );
+
+  const headerInner = (
+    <>
+      <span className="relative shrink-0">
+        <Avatar src={avatarSrc} name={displayName} size="md" />
+        {!isGroup && otherShowsPresence ? (
+          <span className="absolute right-0 bottom-0">
+            <PresenceDot online={isOnline} size="sm" />
+          </span>
+        ) : null}
+        {isGroup ? (
+          <span className="absolute -right-1 -bottom-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-gray-600 ring-2 ring-white dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-900">
+            <Users className="h-2.5 w-2.5" aria-hidden="true" />
+          </span>
+        ) : null}
+      </span>
+
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+          {isLoading ? '…' : displayName}
+        </span>
+        {presenceText ? (
+          <span
+            className={clsx(
+              'truncate text-[11px]',
+              isOnline
+                ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                : 'text-gray-500 dark:text-gray-400',
+            )}
+          >
+            {presenceText}
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+
   /* ---------- Render ---------- */
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-2 dark:border-gray-800 dark:bg-gray-900">
@@ -242,49 +298,27 @@ const ChatHeader = ({
         <ChevronLeft className="h-5 w-5" aria-hidden="true" />
       </Link>
 
-      <button
-        type="button"
-        onClick={handleHeaderClick}
-        disabled={!isGroup}
-        className={clsx(
-          'flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 text-left transition-colors',
-          isGroup
-            ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
-            : 'cursor-default',
-        )}
-      >
-        <span className="relative shrink-0">
-          <Avatar src={avatarSrc} name={displayName} size="md" />
-          {!isGroup && otherShowsPresence ? (
-            <span className="absolute right-0 bottom-0">
-              <PresenceDot online={isOnline} size="sm" />
-            </span>
-          ) : null}
-          {isGroup ? (
-            <span className="absolute -right-1 -bottom-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-gray-600 ring-2 ring-white dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-900">
-              <Users className="h-2.5 w-2.5" aria-hidden="true" />
-            </span>
-          ) : null}
-        </span>
-
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-            {isLoading ? '…' : displayName}
-          </span>
-          {presenceText ? (
-            <span
-              className={clsx(
-                'truncate text-[11px]',
-                isOnline
-                  ? 'font-medium text-emerald-600 dark:text-emerald-400'
-                  : 'text-gray-500 dark:text-gray-400',
-              )}
-            >
-              {presenceText}
-            </span>
-          ) : null}
-        </span>
-      </button>
+      {isGroup ? (
+        <button
+          type="button"
+          onClick={handleHeaderClick}
+          disabled={!headerInteractive}
+          aria-label={`Open settings for ${displayName}`}
+          className={headerSharedClass}
+        >
+          {headerInner}
+        </button>
+      ) : peerProfileTo ? (
+        <Link
+          to={peerProfileTo}
+          aria-label={`Open profile of ${displayName}`}
+          className={headerSharedClass}
+        >
+          {headerInner}
+        </Link>
+      ) : (
+        <span className={headerSharedClass}>{headerInner}</span>
+      )}
 
       <div className="flex items-center gap-1">
         <button

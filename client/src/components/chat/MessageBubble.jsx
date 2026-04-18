@@ -453,6 +453,7 @@ const MessageBubble = ({
   tickStatus = 'sent',
   tickTooltip = '',
   currentUserId = null,
+  isHighlighted = false,
   onReply,
   onEdit,
   onDelete,
@@ -741,8 +742,10 @@ const MessageBubble = ({
 
       <div
         className={clsx(
-          'relative flex max-w-[75%] flex-col gap-0.5',
+          'relative flex max-w-[75%] flex-col gap-0.5 rounded-lg transition-all duration-300',
           isOwn ? 'items-end' : 'items-start',
+          isHighlighted &&
+            'bg-yellow-100/70 ring-2 ring-yellow-400 ring-offset-2 ring-offset-gray-50 dark:bg-yellow-500/10 dark:ring-yellow-300/70 dark:ring-offset-gray-950',
         )}
       >
         {!isOwn && isGroup && showName ? (
@@ -783,11 +786,15 @@ const MessageBubble = ({
                 className={clsx(
                   'mt-1 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-opacity',
                   'hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200',
-                  // Only reveal on hover/focus on desktop; long-press
-                  // on mobile opens the menu without the button.
+                  // Always discoverable: a faint ghost on coarse / no-
+                  // hover devices (so mobile users don't have to guess
+                  // the long-press affordance), promoted to full
+                  // opacity on hover, focus-visible, or while open.
+                  // The faint state is suppressed on hover-capable
+                  // pointers so desktop bubbles stay clean by default.
                   menuOpen
                     ? 'opacity-100'
-                    : 'opacity-0 group-hover/bubble:opacity-100 focus:opacity-100',
+                    : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 group-hover/bubble:opacity-100 group-focus-within/bubble:opacity-100 hover:[@media(hover:hover)]:opacity-100 [@media(hover:hover)]:opacity-0',
                 )}
               >
                 <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
