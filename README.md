@@ -25,6 +25,10 @@
     <a href="#screenshots">Screenshots</a>
   </p>
 
+  <a href="https://chat-app-mernn.netlify.app/">
+    <img src="./assets/screenshots/landing.png" alt="Chat App landing page" width="90%" />
+  </a>
+
 </div>
 
 ---
@@ -60,9 +64,52 @@
 
 ## Screenshots
 
-The full experience — authentication, the live chat surface in light/dark themes, settings, and the admin console — is best viewed on the [live deployment](https://chat-app-mernn.netlify.app/) running against the seeded demo dataset.
+All screenshots are captured from the [live deployment](https://chat-app-mernn.netlify.app/) running against a seeded demo conversation.
 
-> Image assets are not checked into the repository. To capture your own set, run the app locally and place files under `assets/screenshots/` (e.g. `landing.png`, `chat-dark.png`, `admin.png`), then reference them here.
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/landing.png"><img src="./assets/screenshots/landing.png" alt="Landing" /></a>
+      <sub><b>Landing</b><br/>Marketing hero & feature pitch</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/login.png"><img src="./assets/screenshots/login.png" alt="Login" /></a>
+      <sub><b>Login</b><br/>JWT-backed sign in</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/register.png"><img src="./assets/screenshots/register.png" alt="Register" /></a>
+      <sub><b>Register</b><br/>Validated sign up with strength meter</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/chat.png"><img src="./assets/screenshots/chat.png" alt="Chat dark theme" /></a>
+      <sub><b>Chat (dark)</b><br/>Real-time conversation surface</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/chat-light.png"><img src="./assets/screenshots/chat-light.png" alt="Chat light theme" /></a>
+      <sub><b>Chat (light)</b><br/>Instant theme switching</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/settings-profile.png"><img src="./assets/screenshots/settings-profile.png" alt="Profile settings" /></a>
+      <sub><b>Profile</b><br/>Identity, avatar & bio</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/settings-appearance.png"><img src="./assets/screenshots/settings-appearance.png" alt="Appearance settings" /></a>
+      <sub><b>Appearance</b><br/>Theme, font size & density</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/settings-privacy.png"><img src="./assets/screenshots/settings-privacy.png" alt="Privacy settings" /></a>
+      <sub><b>Privacy</b><br/>Online status & read receipts</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="./assets/screenshots/settings-notifications.png"><img src="./assets/screenshots/settings-notifications.png" alt="Notification settings" /></a>
+      <sub><b>Notifications</b><br/>Browser, sound & mute-all</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -505,6 +552,10 @@ client/
 chat-app-mern/
 ├── client/                    # → see Client panel above
 ├── server/                    # → see Server panel above
+├── assets/
+│   └── screenshots/           # README screenshots (live deployment)
+├── docs/
+│   └── build-guide.md         # step-by-step build playbook
 ├── .github/
 │   ├── ISSUE_TEMPLATE/        # bug_report.yml, feature_request.yml, config.yml
 │   ├── PULL_REQUEST_TEMPLATE.md
