@@ -197,8 +197,11 @@ const Sidebar = () => {
       const conversationId = String(message.conversationId);
       const senderId = message?.sender?._id ? String(message.sender._id) : null;
 
+      // Mirror the server's `lastMessage` snapshot rules so the live
+      // sidebar preview matches what a refetch would show: image messages
+      // render as "[image]" regardless of any caption.
       const lastMessage = {
-        text: message.text ?? '',
+        text: message.type === 'image' ? '[image]' : (message.text ?? ''),
         sender: message.sender ?? null,
         type: message.type ?? 'text',
         createdAt: message.createdAt ?? new Date().toISOString(),

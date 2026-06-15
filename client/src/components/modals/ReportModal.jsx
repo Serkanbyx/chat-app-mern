@@ -66,7 +66,7 @@ const ReportModal = ({ open, onClose, targetType, targetId, targetLabel }) => {
         targetType,
         targetId,
         reason,
-        ...(details.trim() ? { details: details.trim() } : {}),
+        ...(details.trim() ? { description: details.trim() } : {}),
       });
       toast.success('Report submitted. Our team will review it.');
       onClose?.();

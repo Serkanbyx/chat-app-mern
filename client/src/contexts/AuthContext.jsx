@@ -158,7 +158,13 @@ export const AuthProvider = ({ children }) => {
       // The axios 401 interceptor already redirects on auth failure;
       // we still null-out local state defensively in case the response
       // status was something else (network error, 5xx).
-      if (error?.response?.status === 401) {
+      //
+      // 403 here means the account was suspended mid-session (`protect`
+      // rejects inactive users with forbidden). The global interceptor
+      // only acts on 401, so we must clear the session ourselves or the
+      // UI would hang on a dead token until a manual reload.
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
         logout({ redirect: false });
       }
       return null;
@@ -193,11 +199,15 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         if (cancelled) return;
         // 401 is the common case (revoked token); axios already cleared
-        // localStorage. Any other error (network, 5xx) shouldn't kick a
-        // user out, but without a verified user we still can't render
-        // authenticated UI, so we treat the session as anonymous for
-        // this load and let them retry by reloading.
-        if (error?.response?.status === 401) {
+        // localStorage. 403 means the account was suspended (`protect`
+        // forbids inactive users) — the global interceptor ignores 403,
+        // so we clear the stored token here to avoid an undead session.
+        // Any other error (network, 5xx) shouldn't kick a user out, so we
+        // treat the session as anonymous for this load and let them retry
+        // by reloading.
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          writeToken(null);
           setToken(null);
         }
       } finally {

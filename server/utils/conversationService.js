@@ -140,6 +140,57 @@ export const resetUnread = async (conversationId, userId) => {
 };
 
 /**
+ * Detach a user from every conversation they belong to while preserving
+ * the schema invariants the naive `$pull` cannot:
+ *   - Direct chats (and any group that drops below 2 members) are
+ *     tombstoned (`isActive: false`) instead of being left structurally
+ *     invalid — a 1-participant active group throws on the next `.save()`.
+ *   - A group that loses its last admin promotes its earliest-joined
+ *     remaining participant so it never becomes admin-less.
+ *
+ * Used by the self-delete (auth) and admin hard-delete cascades. Runs one
+ * targeted `updateOne` per affected conversation so each row gets the
+ * correct branch — bulk `updateMany` cannot express the per-row logic.
+ */
+export const detachUserFromConversations = async (userId) => {
+  const uid = toIdString(userId);
+  if (!uid || !isValidObjectId(uid)) return;
+
+  const conversations = await Conversation.find({ participants: uid }).select(
+    'participants admins type',
+  );
+
+  await Promise.all(
+    conversations.map((conv) => {
+      const remaining = conv.participants
+        .map((p) => String(p))
+        .filter((id) => id !== uid);
+
+      const update = {
+        $pull: { participants: uid, admins: uid },
+        $unset: { [`unreadCounts.${uid}`]: '' },
+      };
+
+      if (remaining.length < 2) {
+        // Direct chat, or a group that would drop below the 2-member
+        // minimum — close it rather than leave an invalid document.
+        update.$set = { isActive: false };
+      } else if (conv.type === CONVERSATION_TYPES.GROUP) {
+        const remainingAdmins = conv.admins
+          .map((a) => String(a))
+          .filter((id) => id !== uid && remaining.includes(id));
+        if (remainingAdmins.length === 0) {
+          // Promote the earliest-joined remaining participant.
+          update.$addToSet = { admins: remaining[0] };
+        }
+      }
+
+      return Conversation.updateOne({ _id: conv._id }, update);
+    }),
+  );
+};
+
+/**
  * Internal helpers exported for test ergonomics. Not part of the public
  * surface — feature controllers should not need these directly.
  */

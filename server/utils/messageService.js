@@ -40,6 +40,31 @@ const isValidObjectId = (value) =>
 const SENDER_PROJECTION = '_id username displayName avatarUrl';
 
 /**
+ * Fields exposed for a quoted (`replyTo`) message. We never include
+ * `hiddenFor`/`readBy`/`reactions` here — a reply preview only needs the
+ * author, kind, and a short body to render the quote bar. `deletedFor`
+ * lets the client render "deleted message" instead of stale text.
+ */
+const REPLY_PROJECTION = '_id type text imageUrl deletedFor sender createdAt';
+
+/**
+ * Populate options shared by every path that returns a message to the
+ * client. `sender` powers the bubble identity; `replyTo` (with its own
+ * sender) powers the quoted-reply preview. Without the `replyTo` populate
+ * the client receives a bare ObjectId and the quote bar silently vanishes
+ * after the message round-trips through the server (send ack, history
+ * fetch, edit, etc.).
+ */
+const MESSAGE_POPULATE = [
+  { path: 'sender', select: SENDER_PROJECTION },
+  {
+    path: 'replyTo',
+    select: REPLY_PROJECTION,
+    populate: { path: 'sender', select: SENDER_PROJECTION },
+  },
+];
+
+/**
  * Strip control characters, neutralize the four HTML "structural" chars
  * (`< > & "`), collapse whitespace, and trim. We NEVER want a server-built
  * system message to end up containing markup-shaped substrings derived
@@ -257,7 +282,7 @@ export const createMessage = async ({
   }
 
   const message = await Message.create(payload);
-  return message.populate({ path: 'sender', select: SENDER_PROJECTION });
+  return message.populate(MESSAGE_POPULATE);
 };
 
 /**
@@ -435,7 +460,7 @@ export const listMessages = async ({
   const docs = await Message.find(filter)
     .sort({ _id: -1 })
     .limit(safeLimit + 1)
-    .populate({ path: 'sender', select: SENDER_PROJECTION });
+    .populate(MESSAGE_POPULATE);
 
   const hasMore = docs.length > safeLimit;
   const sliced = hasMore ? docs.slice(0, safeLimit) : docs;
@@ -484,7 +509,45 @@ export const editMessage = async ({ messageId, actor, text }) => {
   message.editedAt = new Date();
   await message.save();
 
-  return message.populate({ path: 'sender', select: SENDER_PROJECTION });
+  return message.populate(MESSAGE_POPULATE);
+};
+
+/**
+ * Keep `Conversation.lastMessage` honest after a delete-for-everyone.
+ *
+ * The Message post-save hook only refreshes the snapshot for brand-new
+ * messages (`isNew`), so redacting the most recent message would
+ * otherwise leave the sidebar preview showing its original text until
+ * the next send. We only touch the snapshot when the redacted message is
+ * still the conversation's latest — older deletions don't affect it.
+ */
+const refreshLastMessageIfLatest = async (message) => {
+  const cid = message.conversationId;
+  const latest = await Message.findOne({ conversationId: cid })
+    .sort({ createdAt: -1, _id: -1 })
+    .select('_id type text imageUrl sender createdAt deletedFor')
+    .lean();
+  if (!latest || String(latest._id) !== String(message._id)) return;
+
+  let text = '';
+  if (latest.deletedFor === MESSAGE_DELETED_FOR.EVERYONE) {
+    text = '';
+  } else if (latest.type === MESSAGE_TYPES.IMAGE) {
+    text = '[image]';
+  } else {
+    text = latest.text || '';
+  }
+
+  await Conversation.findByIdAndUpdate(cid, {
+    $set: {
+      lastMessage: {
+        text,
+        sender: latest.sender ?? null,
+        type: latest.type,
+        createdAt: latest.createdAt,
+      },
+    },
+  });
 };
 
 /**
@@ -532,9 +595,13 @@ export const deleteMessage = async ({ messageId, actor, scope }) => {
   message.imagePublicId = '';
   await message.save();
 
+  // Refresh the sidebar preview if this was the conversation's latest
+  // message — otherwise it would keep showing the now-redacted text.
+  await refreshLastMessageIfLatest(message);
+
   return {
     scope: 'everyone',
-    message: await message.populate({ path: 'sender', select: SENDER_PROJECTION }),
+    message: await message.populate(MESSAGE_POPULATE),
     // Surface to the caller so it can fire-and-forget a Cloudinary destroy.
     imagePublicId: previousImagePublicId,
   };
@@ -594,7 +661,7 @@ export const toggleReaction = async ({ messageId, actor, emoji }) => {
   }
 
   await message.save();
-  await message.populate({ path: 'sender', select: SENDER_PROJECTION });
+  await message.populate(MESSAGE_POPULATE);
 
   return { action, message };
 };
@@ -626,22 +693,42 @@ export const searchMessages = async ({
     throw ApiError.badRequest('Search term must be 2–100 characters');
   }
 
-  const conversation = await Conversation.findById(cid).select('participants');
+  const conversation = await Conversation.findById(cid).select(
+    'participants type',
+  );
   assertParticipant(conversation, uid);
 
   const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 50);
   const safe = escapeRegex(term);
 
-  const items = await Message.find({
+  const filter = {
     conversationId: cid,
     type: MESSAGE_TYPES.TEXT,
     text: { $regex: safe, $options: 'i' },
     deletedFor: { $ne: MESSAGE_DELETED_FOR.EVERYONE },
     hiddenFor: { $ne: new Types.ObjectId(uid) },
-  })
+  };
+
+  // Mirror `listMessages`: in a direct chat, never surface the other
+  // party's post-block messages through search either, or the cutoff
+  // enforced on history would be trivially bypassable.
+  if (conversation.type === CONVERSATION_TYPES.DIRECT) {
+    const { otherId, cutoffAt } = await getDirectBlockState({
+      conversation,
+      viewerId: uid,
+    });
+    if (otherId && cutoffAt) {
+      filter.$nor = (filter.$nor || []).concat({
+        sender: new Types.ObjectId(otherId),
+        createdAt: { $gt: cutoffAt },
+      });
+    }
+  }
+
+  const items = await Message.find(filter)
     .sort({ createdAt: -1 })
     .limit(safeLimit)
-    .populate({ path: 'sender', select: SENDER_PROJECTION });
+    .populate(MESSAGE_POPULATE);
 
   return { items, total: items.length };
 };

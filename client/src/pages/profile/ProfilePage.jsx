@@ -127,38 +127,47 @@ const ProfilePage = () => {
   };
 
   const handleBlockConfirm = async () => {
-    if (!targetUser) return;
-    await blockUser(targetUser._id);
-    toast.success(`${targetUser.displayName || targetUser.username} blocked.`);
+    if (!targetUser || actionInFlight) return;
+    setActionInFlight(true);
+    try {
+      await blockUser(targetUser._id);
+      toast.success(`${targetUser.displayName || targetUser.username} blocked.`);
 
-    /* Mirror the server-side mutation in the local viewer cache so the
-     * navbar avatar dropdown / other surfaces immediately reflect the
-     * change without waiting for a `/auth/me` round-trip. */
-    if (viewer) {
-      updateUser((prev) => {
-        const next = { ...prev };
-        const current = Array.isArray(prev.blockedUsers)
-          ? prev.blockedUsers
-          : [];
-        const alreadyHas = current.some((entry) => {
-          const id = entry?.user?._id ?? entry?.user ?? entry;
-          return String(id) === String(targetUser._id);
+      /* Mirror the server-side mutation in the local viewer cache so the
+       * navbar avatar dropdown / other surfaces immediately reflect the
+       * change without waiting for a `/auth/me` round-trip. */
+      if (viewer) {
+        updateUser((prev) => {
+          const next = { ...prev };
+          const current = Array.isArray(prev.blockedUsers)
+            ? prev.blockedUsers
+            : [];
+          const alreadyHas = current.some((entry) => {
+            const id = entry?.user?._id ?? entry?.user ?? entry;
+            return String(id) === String(targetUser._id);
+          });
+          if (!alreadyHas) {
+            next.blockedUsers = [
+              ...current,
+              { user: targetUser._id, blockedAt: new Date().toISOString() },
+            ];
+          }
+          return next;
         });
-        if (!alreadyHas) {
-          next.blockedUsers = [
-            ...current,
-            { user: targetUser._id, blockedAt: new Date().toISOString() },
-          ];
-        }
-        return next;
-      });
-    }
+      }
 
-    setBlockModalOpen(false);
-    setState((prev) => ({
-      ...prev,
-      relationship: { ...(prev.relationship ?? {}), isBlockedByMe: true },
-    }));
+      setBlockModalOpen(false);
+      setState((prev) => ({
+        ...prev,
+        relationship: { ...(prev.relationship ?? {}), isBlockedByMe: true },
+      }));
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || 'Could not block user.';
+      toast.error(message);
+    } finally {
+      setActionInFlight(false);
+    }
   };
 
   const handleUnblock = async () => {

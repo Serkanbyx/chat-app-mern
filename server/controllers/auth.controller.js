@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { ApiError } from '../utils/apiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { generateToken } from '../utils/generateToken.js';
+import { detachUserFromConversations } from '../utils/conversationService.js';
 import { ROLES, USER_STATUS, DELETED_USER_LABEL } from '../utils/constants.js';
 
 /**
@@ -142,13 +143,10 @@ const cascadeUserDeletion = async (userId) => {
   );
 
   if (mongoose.models.Conversation) {
-    const Conversation = mongoose.models.Conversation;
-    tasks.push(
-      Conversation.updateMany(
-        { participants: userId },
-        { $pull: { participants: userId, admins: userId } },
-      ),
-    );
+    // Detach with invariant preservation (tombstone solo/sub-2 groups,
+    // promote a new admin when the last one leaves). A plain `$pull`
+    // would leave 1-member "active" groups that throw on the next save.
+    tasks.push(detachUserFromConversations(userId));
   }
 
   if (mongoose.models.Message) {

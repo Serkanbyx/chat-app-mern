@@ -83,7 +83,13 @@ export const editMessageController = asyncHandler(async (req, res) => {
   });
 
   const io = req.app.get('io');
-  if (io) broadcastEditedMessage(io, { message: updated });
+  if (io) {
+    try {
+      broadcastEditedMessage(io, { message: updated });
+    } catch (err) {
+      console.error('[editMessage] broadcast failed:', err);
+    }
+  }
 
   res.status(200).json({ success: true, data: serializeMessage(updated) });
 });
@@ -102,14 +108,18 @@ export const deleteMessageController = asyncHandler(async (req, res) => {
 
   if (result.scope === 'self') {
     if (io) {
-      // 'self' scope only reaches the actor's other devices — never the
-      // rest of the conversation. The broadcaster enforces this routing.
-      broadcastDeletedMessage(io, {
-        conversationId,
-        messageId: req.params.id,
-        scope: 'self',
-        actorUserId: req.user._id,
-      });
+      try {
+        // 'self' scope only reaches the actor's other devices — never the
+        // rest of the conversation. The broadcaster enforces this routing.
+        broadcastDeletedMessage(io, {
+          conversationId,
+          messageId: req.params.id,
+          scope: 'self',
+          actorUserId: req.user._id,
+        });
+      } catch (err) {
+        console.error('[deleteMessage] broadcast failed:', err);
+      }
     }
     return res
       .status(200)
@@ -117,11 +127,15 @@ export const deleteMessageController = asyncHandler(async (req, res) => {
   }
 
   if (io) {
-    broadcastDeletedMessage(io, {
-      conversationId,
-      messageId: req.params.id,
-      scope: 'everyone',
-    });
+    try {
+      broadcastDeletedMessage(io, {
+        conversationId,
+        messageId: req.params.id,
+        scope: 'everyone',
+      });
+    } catch (err) {
+      console.error('[deleteMessage] broadcast failed:', err);
+    }
   }
 
   // Permanent delete: orphaned Cloudinary assets become billable storage
@@ -149,7 +163,13 @@ export const toggleReactionController = asyncHandler(async (req, res) => {
   });
 
   const io = req.app.get('io');
-  if (io) broadcastReactionUpdated(io, { message });
+  if (io) {
+    try {
+      broadcastReactionUpdated(io, { message });
+    } catch (err) {
+      console.error('[toggleReaction] broadcast failed:', err);
+    }
+  }
 
   res.status(200).json({
     success: true,

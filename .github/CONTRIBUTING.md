@@ -90,16 +90,18 @@ Make sure you have the following installed:
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/REPOSITORY_NAME.git
+git clone https://github.com/YOUR_USERNAME/chat-app-mern.git
 
 # Navigate to project directory
-cd REPOSITORY_NAME
+cd chat-app-mern
 
-# Install dependencies (if applicable)
-# npm install / pip install -r requirements.txt / etc.
+# Install dependencies (server + client)
+cd server && npm install
+cd ../client && npm install
 
-# Start development server (if applicable)
-# npm start / python app.py / etc.
+# Start development servers
+cd server && npm run dev   # Terminal 1 — API
+cd client && npm run dev   # Terminal 2 — Web
 ```
 
 ## Style Guidelines

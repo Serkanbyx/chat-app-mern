@@ -9,6 +9,7 @@ import { escapeRegex } from '../utils/escapeRegex.js';
 import { parsePagination, buildPageMeta } from '../utils/pagination.js';
 import { safeDestroy } from '../config/cloudinary.js';
 import { userRoom } from '../sockets/rooms.js';
+import { detachUserFromConversations } from '../utils/conversationService.js';
 import { broadcastDeletedMessage } from '../sockets/message.socket.js';
 import { writeAuditLog } from '../utils/adminAudit.js';
 import {
@@ -72,10 +73,10 @@ const cascadeAdminDelete = async (user) => {
   const userId = user._id;
 
   await Promise.all([
-    Conversation.updateMany(
-      { participants: userId },
-      { $pull: { participants: userId, admins: userId } },
-    ),
+    // Detach with invariant preservation (tombstone solo/sub-2 groups,
+    // promote a new admin when the last one leaves) instead of a flat
+    // `$pull` that can leave 1-member "active" groups.
+    detachUserFromConversations(userId),
     User.updateMany(
       { 'blockedUsers.user': userId },
       { $pull: { blockedUsers: { user: userId } } },

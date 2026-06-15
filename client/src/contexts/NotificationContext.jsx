@@ -139,10 +139,30 @@ export const NotificationProvider = ({ children }) => {
       const title = fromUser?.displayName || 'New notification';
 
       // 1. Bump in-memory state.
-      setUnreadCount((prev) => prev + 1);
+      //
+      // The server collapses bursts from the same (recipient, conversation)
+      // into ONE persisted row within a 30s window, re-emitting the SAME
+      // notification `_id`. Blindly incrementing on every event would make
+      // the badge drift above the real unread-row count, so we only bump
+      // the counter for a genuinely new row (or the local fallback when
+      // persistence failed). A collapse just refreshes the existing entry.
+      const persisted = payload.notification ?? null;
+      let isCollapse = false;
       setNotifications((prev) => {
-        const persisted = payload.notification ?? null;
-        const entry = persisted ?? {
+        if (persisted?._id) {
+          const idx = prev.findIndex((n) => n._id === persisted._id);
+          if (idx !== -1) {
+            isCollapse = true;
+            const next = prev.slice();
+            next.splice(idx, 1);
+            return [persisted, ...next];
+          }
+          const next = [persisted, ...prev];
+          return next.length > NOTIFICATION_BUFFER_SIZE
+            ? next.slice(0, NOTIFICATION_BUFFER_SIZE)
+            : next;
+        }
+        const entry = {
           _id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           conversationId,
           actor: fromUser ?? null,
@@ -155,6 +175,7 @@ export const NotificationProvider = ({ children }) => {
           ? next.slice(0, NOTIFICATION_BUFFER_SIZE)
           : next;
       });
+      if (!isCollapse) setUnreadCount((prev) => prev + 1);
 
       // 2. Toast — always (cheap, in-app, can be visually muted via prefs.animations
       // through global CSS if needed).
@@ -204,6 +225,10 @@ export const NotificationProvider = ({ children }) => {
       prev.map((n) => (n._id === id ? { ...n, isRead: true } : n)),
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
+    // Local fallback rows (persistence failed server-side) have no DB
+    // counterpart — hitting `/notifications/:id/read` with a synthetic id
+    // would 400/404, so we update local state only.
+    if (typeof id === 'string' && id.startsWith('local-')) return;
     try {
       await notificationService.markRead(id);
     } catch (error) {

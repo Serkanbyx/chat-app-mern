@@ -41,7 +41,7 @@ export const unblockUser = async (userId) => {
 
 /**
  * Submit a user/message report. Payload mirrors `validateReport` on the
- * server: `{ targetType: 'user' | 'message', targetId, reason, details? }`.
+ * server: `{ targetType: 'user' | 'message', targetId, reason, description? }`.
  */
 export const reportTarget = async (payload) => {
   const { data } = await api.post('/reports', payload);

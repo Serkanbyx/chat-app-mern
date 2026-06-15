@@ -710,7 +710,15 @@ const toggleUserArrayMembership = async ({ user, conversationId, field }) => {
     : { $addToSet: { [field]: cid } };
 
   await User.updateOne({ _id: user._id }, op);
-  return !isMember;
+
+  // Return BOTH the boolean and the reconciled array. Clients optimistically
+  // flip the membership, then reconcile against `list` so a concurrent
+  // mutation from another device can't strand a wrong toggle state.
+  const list = isMember
+    ? current.filter((id) => id !== String(cid))
+    : [...current, String(cid)];
+
+  return { active: !isMember, list };
 };
 
 // POST /api/conversations/:id/mute
@@ -720,13 +728,15 @@ export const toggleMute = asyncHandler(async (req, res) => {
   );
   assertParticipant(conversation, req.user._id);
 
-  const muted = await toggleUserArrayMembership({
+  const { active, list } = await toggleUserArrayMembership({
     user: req.user,
     conversationId: req.params.id,
     field: 'mutedConversations',
   });
 
-  res.status(200).json({ success: true, data: { muted } });
+  res
+    .status(200)
+    .json({ success: true, data: { muted: active, mutedConversations: list } });
 });
 
 // POST /api/conversations/:id/archive
@@ -736,13 +746,16 @@ export const toggleArchive = asyncHandler(async (req, res) => {
   );
   assertParticipant(conversation, req.user._id);
 
-  const archived = await toggleUserArrayMembership({
+  const { active, list } = await toggleUserArrayMembership({
     user: req.user,
     conversationId: req.params.id,
     field: 'archivedConversations',
   });
 
-  res.status(200).json({ success: true, data: { archived } });
+  res.status(200).json({
+    success: true,
+    data: { archived: active, archivedConversations: list },
+  });
 });
 
 // POST /api/conversations/:id/read
@@ -797,8 +810,44 @@ export const getUnreadSummary = asyncHandler(async (req, res) => {
   const userIdStr = String(req.user._id);
   const unreadPath = `$unreadCounts.${userIdStr}`;
 
+  // Mirror the visibility rules of `getConversations` so the global badge
+  // never counts chats the user can't actually see in the sidebar:
+  //   - archived conversations are excluded,
+  //   - direct chats with a blocked / blocking user are excluded.
+  const archivedIds = (req.user.archivedConversations || []).map(
+    (id) => new Types.ObjectId(String(id)),
+  );
+
+  const blockedByMe = (req.user.blockedUsers || [])
+    .map((entry) => entry?.user)
+    .filter(Boolean);
+  const blockedMeRows = await User.find(
+    { 'blockedUsers.user': req.user._id },
+    { _id: 1 },
+  ).lean();
+  const hiddenUserIds = Array.from(
+    new Set(
+      [...blockedByMe, ...blockedMeRows.map((u) => u._id)].map((id) =>
+        String(id),
+      ),
+    ),
+  ).map((s) => new Types.ObjectId(s));
+
+  const match = { participants: req.user._id, isActive: true };
+  if (archivedIds.length > 0) {
+    match._id = { $nin: archivedIds };
+  }
+  if (hiddenUserIds.length > 0) {
+    match.$nor = [
+      {
+        type: CONVERSATION_TYPES.DIRECT,
+        participants: { $in: hiddenUserIds },
+      },
+    ];
+  }
+
   const rows = await Conversation.aggregate([
-    { $match: { participants: req.user._id, isActive: true } },
+    { $match: match },
     {
       $project: {
         _id: 1,
